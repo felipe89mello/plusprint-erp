@@ -13,6 +13,7 @@ class ClienteBase(BaseModel):
     telefone: Optional[str] = None
     email: Optional[str] = None
     endereco: Optional[str] = None
+    contato_nome: Optional[str] = None
 
 
 class ClienteCreate(ClienteBase):
@@ -25,6 +26,7 @@ class ClienteUpdate(BaseModel):
     telefone: Optional[str] = None
     email: Optional[str] = None
     endereco: Optional[str] = None
+    contato_nome: Optional[str] = None
 
 
 class ClienteOut(ClienteBase):
@@ -90,27 +92,81 @@ class OrdemServicoOut(OrdemServicoBase):
 
 # ---------- Orçamento ----------
 
+class ItemOrcamentoCreate(BaseModel):
+    quantidade: Decimal
+    descricao: str
+    valor_unitario: Decimal
+
+
+class ItemOrcamentoOut(ItemOrcamentoCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    valor_total: Decimal = Decimal("0")
+
+    @classmethod
+    def from_model(cls, item):
+        return cls(
+            id=item.id,
+            quantidade=item.quantidade,
+            descricao=item.descricao,
+            valor_unitario=item.valor_unitario,
+            valor_total=item.quantidade * item.valor_unitario,
+        )
+
+
 class OrcamentoBase(BaseModel):
+    numero: Optional[str] = None
     cliente_id: int
-    descricao_itens: str
-    valor_total: Decimal
+    equipamento_id: Optional[int] = None
+    local_equipamento: Optional[str] = None
+    defeitos_constatados: Optional[str] = None
+    solucao_adotada: Optional[str] = None
+    observacoes: Optional[str] = None
+    validade_dias: int = 5
+    condicoes_pagamento: Optional[str] = None
+    prazo_entrega: Optional[str] = None
+    garantia_dias: int = 90
+    responsabilidade_transporte: str = "Cliente"
+    tecnico_responsavel: Optional[str] = None
     status: str = "pendente"
 
 
 class OrcamentoCreate(OrcamentoBase):
-    pass
+    itens: list[ItemOrcamentoCreate] = []
 
 
 class OrcamentoUpdate(BaseModel):
-    descricao_itens: Optional[str] = None
-    valor_total: Optional[Decimal] = None
+    numero: Optional[str] = None
+    equipamento_id: Optional[int] = None
+    local_equipamento: Optional[str] = None
+    defeitos_constatados: Optional[str] = None
+    solucao_adotada: Optional[str] = None
+    observacoes: Optional[str] = None
+    validade_dias: Optional[int] = None
+    condicoes_pagamento: Optional[str] = None
+    prazo_entrega: Optional[str] = None
+    garantia_dias: Optional[int] = None
+    responsabilidade_transporte: Optional[str] = None
+    tecnico_responsavel: Optional[str] = None
     status: Optional[str] = None
+    itens: Optional[list[ItemOrcamentoCreate]] = None
 
 
 class OrcamentoOut(OrcamentoBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     data: datetime
+    itens: list[ItemOrcamentoOut] = []
+    valor_total: Decimal = Decimal("0")
+
+    @classmethod
+    def from_model(cls, orcamento):
+        data = {c: getattr(orcamento, c) for c in OrcamentoBase.model_fields}
+        data["id"] = orcamento.id
+        data["data"] = orcamento.data
+        data["itens"] = [ItemOrcamentoOut.from_model(i) for i in orcamento.itens]
+        data["valor_total"] = sum((i.quantidade * i.valor_unitario for i in orcamento.itens), Decimal("0"))
+        return cls(**data)
 
 
 # ---------- Contrato ----------

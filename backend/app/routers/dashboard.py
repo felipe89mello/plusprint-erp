@@ -23,7 +23,8 @@ def obter_dashboard(db: Session = Depends(get_db)):
 
     agora = datetime.utcnow()
     faturamento_mes = (
-        db.query(func.coalesce(func.sum(models.Orcamento.valor_total), 0))
+        db.query(func.coalesce(func.sum(models.ItemOrcamento.quantidade * models.ItemOrcamento.valor_unitario), 0))
+        .join(models.Orcamento, models.ItemOrcamento.orcamento_id == models.Orcamento.id)
         .filter(
             models.Orcamento.status == "aprovado",
             extract("year", models.Orcamento.data) == agora.year,

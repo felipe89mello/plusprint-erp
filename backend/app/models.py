@@ -24,6 +24,7 @@ class Cliente(Base):
     telefone = Column(String(60), nullable=True)
     email = Column(String(150), nullable=True)
     endereco = Column(String(250), nullable=True)
+    contato_nome = Column(String(150), nullable=True)  # pessoa de contato no cliente
 
     equipamentos = relationship("Equipamento", back_populates="cliente")
     ordens_servico = relationship("OrdemServico", back_populates="cliente")
@@ -68,14 +69,43 @@ class Orcamento(Base):
     __tablename__ = "orcamentos"
 
     id = Column(Integer, primary_key=True, index=True)
+    numero = Column(String(20), nullable=True)  # nº da proposta comercial (ex: "084")
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
-    descricao_itens = Column(Text, nullable=False)
-    valor_total = Column(Numeric(10, 2), nullable=False)
+    equipamento_id = Column(Integer, ForeignKey("equipamentos.id"), nullable=True)
+    local_equipamento = Column(String(150), nullable=True)  # ex: "Loja Mooca"
+
+    defeitos_constatados = Column(Text, nullable=True)
+    solucao_adotada = Column(Text, nullable=True)
+    observacoes = Column(Text, nullable=True)
+
+    validade_dias = Column(Integer, default=5)
+    condicoes_pagamento = Column(String(100), nullable=True)  # ex: "28DDL"
+    prazo_entrega = Column(String(150), nullable=True)  # ex: "30 dias após aprovação"
+    garantia_dias = Column(Integer, default=90)
+    responsabilidade_transporte = Column(String(150), default="Cliente")
+    tecnico_responsavel = Column(String(150), nullable=True)
+
     status = Column(String(30), default="pendente")  # pendente | aprovado | recusado
     data = Column(DateTime, default=datetime.utcnow)
 
     cliente = relationship("Cliente", back_populates="orcamentos")
+    equipamento = relationship("Equipamento")
     ordens_servico = relationship("OrdemServico", back_populates="orcamento")
+    itens = relationship("ItemOrcamento", back_populates="orcamento", cascade="all, delete-orphan")
+
+
+class ItemOrcamento(Base):
+    """Uma linha da tabela 'Peças e Serviços' do orçamento (qtde/hrs, descrição, valor unitário)."""
+
+    __tablename__ = "itens_orcamento"
+
+    id = Column(Integer, primary_key=True, index=True)
+    orcamento_id = Column(Integer, ForeignKey("orcamentos.id"), nullable=False)
+    quantidade = Column(Numeric(10, 2), nullable=False)
+    descricao = Column(String(250), nullable=False)
+    valor_unitario = Column(Numeric(10, 2), nullable=False)
+
+    orcamento = relationship("Orcamento", back_populates="itens")
 
 
 class Contrato(Base):

@@ -23,6 +23,7 @@ const ENTITIES = {
       { name: "telefone", label: "Telefone", type: "text" },
       { name: "email", label: "Email", type: "text" },
       { name: "endereco", label: "Endereço", type: "text" },
+      { name: "contato_nome", label: "Pessoa de contato", type: "text" },
     ],
   },
 
@@ -67,19 +68,15 @@ const ENTITIES = {
   orcamentos: {
     title: "Orçamentos",
     endpoint: "/orcamentos/",
+    custom: true, // este módulo usa formulário próprio (openOrcamentoModal), não o motor genérico
     columns: [
       { key: "id", label: "ID", mono: true },
+      { key: "numero", label: "Nº" },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
-      { key: "descricao_itens", label: "Itens" },
       { key: "valor_total", label: "Valor", money: true },
       { key: "status", label: "Status", badge: true },
     ],
-    fields: [
-      { name: "cliente_id", label: "Cliente", type: "select", relation: "clientes", required: true },
-      { name: "descricao_itens", label: "Descrição dos itens", type: "textarea", required: true },
-      { name: "valor_total", label: "Valor total (R$)", type: "number", required: true },
-      { name: "status", label: "Status", type: "select", options: ["pendente", "aprovado", "recusado"] },
-    ],
+    fields: [], // sem uso — preload de relações feito manualmente em openOrcamentoModal
   },
 
   contratos: {
@@ -314,7 +311,8 @@ async function renderList(viewKey) {
             return `<td class="${cls}" ${style}>${value}</td>`;
           })
           .join("");
-        return `<tr>${cells}<td class="row-actions"><button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
+        const pdfBtn = viewKey === "orcamentos" ? `<button class="btn btn-pdf" data-pdf="${item.id}">PDF</button>` : "";
+        return `<tr>${cells}<td class="row-actions">${pdfBtn}<button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
       })
       .join("");
 
@@ -330,10 +328,14 @@ async function renderList(viewKey) {
     root.querySelectorAll("[data-delete]").forEach((btn) => {
       btn.addEventListener("click", () => handleDelete(viewKey, btn.dataset.delete));
     });
+    root.querySelectorAll("[data-pdf]").forEach((btn) => {
+      btn.addEventListener("click", () => window.open(`${API_BASE}/orcamentos/${btn.dataset.pdf}/pdf`, "_blank"));
+    });
     root.querySelectorAll("[data-edit]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const item = items.find((i) => String(i.id) === btn.dataset.edit);
-        openModal(viewKey, item);
+        if (ENTITIES[viewKey].custom) openOrcamentoModal(item);
+        else openModal(viewKey, item);
       });
     });
   } catch (e) {
@@ -438,6 +440,177 @@ async function openModal(viewKey, existingItem = null) {
 
 function closeModal() {
   document.getElementById("modal-overlay").classList.add("hidden");
+  document.getElementById("modal").classList.remove("modal-lg");
+}
+
+// ---------------------------------------------------------------
+// Formulário customizado de Orçamento (itens dinâmicos + condições comerciais)
+// ---------------------------------------------------------------
+
+let itemRowCount = 0;
+
+function itemRowHtml(item = {}) {
+  itemRowCount++;
+  const id = `item-${itemRowCount}`;
+  return `
+    <tr data-item-row="${id}">
+      <td><input type="number" step="0.01" class="item-qtd" value="${item.quantidade ?? ""}" placeholder="Qtde." required></td>
+      <td><input type="text" class="item-desc" value="${item.descricao ?? ""}" placeholder="Descrição" required></td>
+      <td><input type="number" step="0.01" class="item-valor" value="${item.valor_unitario ?? ""}" placeholder="Unitário" required></td>
+      <td class="item-total mono">R$ 0,00</td>
+      <td><button type="button" class="btn btn-danger" data-remove-row="${id}">×</button></td>
+    </tr>
+  `;
+}
+
+function recalcularSubtotal(form) {
+  let subtotal = 0;
+  form.querySelectorAll("[data-item-row]").forEach((row) => {
+    const qtd = parseFloat(row.querySelector(".item-qtd").value) || 0;
+    const valor = parseFloat(row.querySelector(".item-valor").value) || 0;
+    const total = qtd * valor;
+    row.querySelector(".item-total").textContent = formatMoney(total);
+    subtotal += total;
+  });
+  form.querySelector("#subtotal-display").textContent = formatMoney(subtotal);
+}
+
+async function openOrcamentoModal(existingItem) {
+  await preloadRelations({ columns: [{ relation: "clientes" }, { relation: "equipamentos" }], fields: [] });
+
+  const isEdit = existingItem != null;
+  document.getElementById("modal-title").textContent = `${isEdit ? "Editar" : "Novo"} — Orçamento`;
+  document.getElementById("modal").classList.add("modal-lg");
+
+  const clientesOptions = (cache.clientes || [])
+    .map((c) => `<option value="${c.id}" ${isEdit && c.id === existingItem.cliente_id ? "selected" : ""}>${c.nome}</option>`)
+    .join("");
+  const equipamentosOptions = (cache.equipamentos || [])
+    .map((e) => `<option value="${e.id}" ${isEdit && e.id === existingItem.equipamento_id ? "selected" : ""}>${e.marca} ${e.modelo}</option>`)
+    .join("");
+
+  const v = (campo, def = "") => (isEdit && existingItem[campo] != null ? existingItem[campo] : def);
+  const itensExistentes = isEdit && existingItem.itens.length ? existingItem.itens : [{}];
+
+  const form = document.getElementById("modal-form");
+  form.setAttribute("autocomplete", "off");
+  form.innerHTML = `
+    <div class="field-row">
+      <div class="field"><label>Nº da proposta</label><input type="text" name="numero" value="${v("numero")}"></div>
+      <div class="field"><label>Cliente *</label>
+        <select name="cliente_id" required>
+          <option value="">Selecione...</option>
+          ${clientesOptions}
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field"><label>Equipamento</label>
+        <select name="equipamento_id"><option value="">— nenhum —</option>${equipamentosOptions}</select>
+      </div>
+      <div class="field"><label>Local</label><input type="text" name="local_equipamento" value="${v("local_equipamento")}" placeholder="ex: Loja Mooca"></div>
+    </div>
+
+    <div class="field"><label>Defeitos constatados</label><textarea name="defeitos_constatados">${v("defeitos_constatados")}</textarea></div>
+    <div class="field"><label>Solução adotada</label><textarea name="solucao_adotada">${v("solucao_adotada")}</textarea></div>
+
+    <label class="field-label-block">Peças e Serviços</label>
+    <table class="items-table">
+      <thead><tr><th>Qtde./Hrs</th><th>Descrição</th><th>Unitário (R$)</th><th>Total</th><th></th></tr></thead>
+      <tbody id="itens-body">${itensExistentes.map(itemRowHtml).join("")}</tbody>
+    </table>
+    <button type="button" class="btn" id="btn-add-item">+ Adicionar item</button>
+    <div class="subtotal-row">Subtotal: <strong id="subtotal-display">R$ 0,00</strong></div>
+
+    <div class="field-row">
+      <div class="field"><label>Validade (dias)</label><input type="number" name="validade_dias" value="${v("validade_dias", 5)}"></div>
+      <div class="field"><label>Garantia (dias)</label><input type="number" name="garantia_dias" value="${v("garantia_dias", 90)}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Condições de pagamento</label><input type="text" name="condicoes_pagamento" value="${v("condicoes_pagamento")}" placeholder="ex: 28DDL"></div>
+      <div class="field"><label>Prazo de entrega</label><input type="text" name="prazo_entrega" value="${v("prazo_entrega")}" placeholder="ex: 30 dias após aprovação"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Transporte por conta de</label><input type="text" name="responsabilidade_transporte" value="${v("responsabilidade_transporte", "Cliente")}"></div>
+      <div class="field"><label>Técnico responsável</label><input type="text" name="tecnico_responsavel" value="${v("tecnico_responsavel")}"></div>
+    </div>
+
+    <div class="field"><label>Observações</label><textarea name="observacoes">${v("observacoes")}</textarea></div>
+
+    <div class="field"><label>Status</label>
+      <select name="status">
+        ${["pendente", "aprovado", "recusado"].map((s) => `<option value="${s}" ${v("status", "pendente") === s ? "selected" : ""}>${s}</option>`).join("")}
+      </select>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn" id="modal-cancel">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Salvar</button>
+    </div>
+  `;
+
+  document.getElementById("modal-overlay").classList.remove("hidden");
+  document.getElementById("modal-cancel").addEventListener("click", closeModal);
+  document.getElementById("btn-add-item").addEventListener("click", () => {
+    document.getElementById("itens-body").insertAdjacentHTML("beforeend", itemRowHtml());
+    attachItemListeners(form);
+    recalcularSubtotal(form);
+  });
+
+  function attachItemListeners(formEl) {
+    formEl.querySelectorAll("[data-remove-row]").forEach((btn) => {
+      btn.onclick = () => {
+        if (formEl.querySelectorAll("[data-item-row]").length <= 1) return; // mantém ao menos 1 linha
+        formEl.querySelector(`[data-item-row="${btn.dataset.removeRow}"]`).remove();
+        recalcularSubtotal(formEl);
+      };
+    });
+    formEl.querySelectorAll(".item-qtd, .item-valor").forEach((input) => {
+      input.oninput = () => recalcularSubtotal(formEl);
+    });
+  }
+
+  attachItemListeners(form);
+  recalcularSubtotal(form);
+
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(form);
+    const data = Object.fromEntries(fd.entries());
+
+    ["equipamento_id", "cliente_id"].forEach((k) => { if (data[k] === "") delete data[k]; else data[k] = Number(data[k]); });
+    ["validade_dias", "garantia_dias"].forEach((k) => { data[k] = Number(data[k]); });
+
+    data.itens = [];
+    form.querySelectorAll("[data-item-row]").forEach((row) => {
+      const quantidade = parseFloat(row.querySelector(".item-qtd").value);
+      const valor_unitario = parseFloat(row.querySelector(".item-valor").value);
+      const descricao = row.querySelector(".item-desc").value;
+      if (descricao && !isNaN(quantidade) && !isNaN(valor_unitario)) {
+        data.itens.push({ quantidade, descricao, valor_unitario });
+      }
+    });
+
+    if (data.itens.length === 0) {
+      showAlert("Adicione ao menos um item de peça ou serviço.");
+      return;
+    }
+
+    try {
+      if (isEdit) {
+        await apiSend(`/orcamentos/${existingItem.id}`, "PUT", data);
+        showAlert("Orçamento atualizado com sucesso.", "success");
+      } else {
+        await apiSend("/orcamentos/", "POST", data);
+        showAlert("Orçamento criado com sucesso.", "success");
+      }
+      closeModal();
+      renderList("orcamentos");
+    } catch (e) {
+      showAlert(e.message);
+    }
+  };
 }
 
 // ---------------------------------------------------------------
@@ -468,7 +641,10 @@ document.getElementById("nav").addEventListener("click", (ev) => {
   if (btn) switchView(btn.dataset.view);
 });
 
-document.getElementById("btn-novo").addEventListener("click", () => openModal(currentView));
+document.getElementById("btn-novo").addEventListener("click", () => {
+  if (ENTITIES[currentView] && ENTITIES[currentView].custom) openOrcamentoModal(null);
+  else openModal(currentView);
+});
 document.getElementById("modal-close").addEventListener("click", closeModal);
 document.getElementById("modal-overlay").addEventListener("click", (ev) => {
   if (ev.target.id === "modal-overlay") closeModal();

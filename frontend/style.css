@@ -350,6 +350,10 @@ tbody tr:hover { background: #FAFAF8; }
   box-shadow: 0 20px 60px rgba(0,0,0,0.25);
 }
 
+.modal.modal-lg {
+  width: 680px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -406,3 +410,79 @@ tbody tr:hover { background: #FAFAF8; }
   gap: 10px;
   margin-top: 6px;
 }
+
+/* ---------- Orçamento: formulário customizado ---------- */
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.field-label-block {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-top: 6px;
+}
+
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.items-table th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding: 4px 4px;
+}
+
+.items-table td {
+  padding: 3px 4px;
+}
+
+.items-table input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  background: var(--bg);
+}
+
+.items-table .item-total {
+  white-space: nowrap;
+  font-size: 12px;
+  padding-left: 8px;
+}
+
+.items-table .btn-danger {
+  padding: 2px 8px;
+  font-size: 14px;
+}
+
+.subtotal-row {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin: 8px 0 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.btn-pdf {
+  background: transparent;
+  color: var(--amber);
+  border-color: transparent;
+  font-size: 12px;
+  padding: 4px 8px;
+  font-weight: 700;
+}
+
+.btn-pdf:hover { text-decoration: underline; }

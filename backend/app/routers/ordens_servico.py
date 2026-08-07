@@ -13,6 +13,8 @@ def criar_ordem_servico(os_: schemas.OrdemServicoCreate, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Cliente informado não existe")
     if os_.equipamento_id and not db.get(models.Equipamento, os_.equipamento_id):
         raise HTTPException(status_code=400, detail="Equipamento informado não existe")
+    if os_.orcamento_id and not db.get(models.Orcamento, os_.orcamento_id):
+        raise HTTPException(status_code=400, detail="Orçamento informado não existe")
     nova = models.OrdemServico(**os_.model_dump())
     db.add(nova)
     db.commit()

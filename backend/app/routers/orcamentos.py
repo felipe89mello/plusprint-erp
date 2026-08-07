@@ -9,8 +9,8 @@ router = APIRouter(prefix="/orcamentos", tags=["Orçamentos"])
 
 @router.post("/", response_model=schemas.OrcamentoOut, status_code=201)
 def criar_orcamento(orcamento: schemas.OrcamentoCreate, db: Session = Depends(get_db)):
-    if not db.get(models.OrdemServico, orcamento.ordem_servico_id):
-        raise HTTPException(status_code=400, detail="Ordem de serviço informada não existe")
+    if not db.get(models.Cliente, orcamento.cliente_id):
+        raise HTTPException(status_code=400, detail="Cliente informado não existe")
     novo = models.Orcamento(**orcamento.model_dump())
     db.add(novo)
     db.commit()
@@ -20,13 +20,13 @@ def criar_orcamento(orcamento: schemas.OrcamentoCreate, db: Session = Depends(ge
 
 @router.get("/", response_model=list[schemas.OrcamentoOut])
 def listar_orcamentos(
-    ordem_servico_id: int | None = None,
+    cliente_id: int | None = None,
     status: str | None = None,
     db: Session = Depends(get_db),
 ):
     query = db.query(models.Orcamento)
-    if ordem_servico_id is not None:
-        query = query.filter(models.Orcamento.ordem_servico_id == ordem_servico_id)
+    if cliente_id is not None:
+        query = query.filter(models.Orcamento.cliente_id == cliente_id)
     if status is not None:
         query = query.filter(models.Orcamento.status == status)
     return query.all()

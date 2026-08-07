@@ -58,6 +58,7 @@ const ENTITIES = {
     fields: [
       { name: "cliente_id", label: "Cliente", type: "select", relation: "clientes", required: true },
       { name: "equipamento_id", label: "Equipamento", type: "select", relation: "equipamentos" },
+      { name: "orcamento_id", label: "Orçamento de origem (opcional)", type: "select", relation: "orcamentos" },
       { name: "descricao", label: "Descrição", type: "textarea", required: true },
       { name: "status", label: "Status", type: "select", options: ["aberto", "em_andamento", "concluido"] },
     ],
@@ -68,13 +69,13 @@ const ENTITIES = {
     endpoint: "/orcamentos/",
     columns: [
       { key: "id", label: "ID", mono: true },
-      { key: "ordem_servico_id", label: "OS", mono: true },
+      { key: "cliente_id", label: "Cliente", relation: "clientes" },
       { key: "descricao_itens", label: "Itens" },
       { key: "valor_total", label: "Valor", money: true },
       { key: "status", label: "Status", badge: true },
     ],
     fields: [
-      { name: "ordem_servico_id", label: "Ordem de Serviço", type: "select", relation: "ordens", required: true },
+      { name: "cliente_id", label: "Cliente", type: "select", relation: "clientes", required: true },
       { name: "descricao_itens", label: "Descrição dos itens", type: "textarea", required: true },
       { name: "valor_total", label: "Valor total (R$)", type: "number", required: true },
       { name: "status", label: "Status", type: "select", options: ["pendente", "aprovado", "recusado"] },
@@ -199,7 +200,7 @@ function relationLabel(entityKey, id) {
   const list = cache[entityKey] || [];
   const item = list.find((i) => i.id === id);
   if (!item) return `#${id}`;
-  return item.nome || item.descricao || `#${id}`;
+  return item.nome || item.descricao || item.descricao_itens || `#${id}`;
 }
 
 // ---------------------------------------------------------------
@@ -356,13 +357,14 @@ async function openModal(viewKey) {
 
   document.getElementById("modal-title").textContent = `Novo — ${config.title}`;
   const form = document.getElementById("modal-form");
+  form.setAttribute("autocomplete", "off");
 
   form.innerHTML =
     config.fields
       .map((f) => {
         if (f.type === "select") {
           const options = f.relation
-            ? (cache[f.relation] || []).map((i) => `<option value="${i.id}">${i.nome || i.descricao || "#" + i.id}</option>`)
+            ? (cache[f.relation] || []).map((i) => `<option value="${i.id}">${i.nome || i.descricao || i.descricao_itens || "#" + i.id}</option>`)
             : f.options.map((o) => `<option value="${o}">${o}</option>`);
           return `<div class="field">
             <label>${f.label}${f.required ? " *" : ""}</label>

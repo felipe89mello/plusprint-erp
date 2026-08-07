@@ -28,6 +28,7 @@ class Cliente(Base):
     equipamentos = relationship("Equipamento", back_populates="cliente")
     ordens_servico = relationship("OrdemServico", back_populates="cliente")
     contratos = relationship("Contrato", back_populates="cliente")
+    orcamentos = relationship("Orcamento", back_populates="cliente")
 
 
 class Equipamento(Base):
@@ -51,6 +52,7 @@ class OrdemServico(Base):
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     equipamento_id = Column(Integer, ForeignKey("equipamentos.id"), nullable=True)
+    orcamento_id = Column(Integer, ForeignKey("orcamentos.id"), nullable=True)  # orçamento que originou esta OS
     descricao = Column(Text, nullable=False)
     status = Column(String(30), default="aberto")  # aberto | em_andamento | concluido
     data_abertura = Column(DateTime, default=datetime.utcnow)
@@ -58,7 +60,7 @@ class OrdemServico(Base):
 
     cliente = relationship("Cliente", back_populates="ordens_servico")
     equipamento = relationship("Equipamento", back_populates="ordens_servico")
-    orcamentos = relationship("Orcamento", back_populates="ordem_servico")
+    orcamento = relationship("Orcamento", back_populates="ordens_servico")
     itens_peca = relationship("ItemPecaOS", back_populates="ordem_servico")
 
 
@@ -66,13 +68,14 @@ class Orcamento(Base):
     __tablename__ = "orcamentos"
 
     id = Column(Integer, primary_key=True, index=True)
-    ordem_servico_id = Column(Integer, ForeignKey("ordens_servico.id"), nullable=False)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     descricao_itens = Column(Text, nullable=False)
     valor_total = Column(Numeric(10, 2), nullable=False)
     status = Column(String(30), default="pendente")  # pendente | aprovado | recusado
     data = Column(DateTime, default=datetime.utcnow)
 
-    ordem_servico = relationship("OrdemServico", back_populates="orcamentos")
+    cliente = relationship("Cliente", back_populates="orcamentos")
+    ordens_servico = relationship("OrdemServico", back_populates="orcamento")
 
 
 class Contrato(Base):

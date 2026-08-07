@@ -64,6 +64,7 @@ class EquipamentoOut(EquipamentoBase):
 class OrdemServicoBase(BaseModel):
     cliente_id: int
     equipamento_id: Optional[int] = None
+    orcamento_id: Optional[int] = None  # orçamento que originou esta OS, se houver
     descricao: str
     status: str = "aberto"
 
@@ -74,6 +75,7 @@ class OrdemServicoCreate(OrdemServicoBase):
 
 class OrdemServicoUpdate(BaseModel):
     equipamento_id: Optional[int] = None
+    orcamento_id: Optional[int] = None
     descricao: Optional[str] = None
     status: Optional[str] = None
     data_conclusao: Optional[datetime] = None
@@ -89,7 +91,7 @@ class OrdemServicoOut(OrdemServicoBase):
 # ---------- Orçamento ----------
 
 class OrcamentoBase(BaseModel):
-    ordem_servico_id: int
+    cliente_id: int
     descricao_itens: str
     valor_total: Decimal
     status: str = "pendente"

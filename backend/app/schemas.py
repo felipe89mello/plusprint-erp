@@ -259,3 +259,7 @@ class DashboardOut(BaseModel):
     faturamento_mes_atual: Decimal
     contratos_ativos: int
     pecas_com_estoque_baixo: list[PecaOut]
+    orcamentos_total: int
+    orcamentos_pendentes: int
+    orcamentos_aprovados: int
+    orcamentos_recusados: int

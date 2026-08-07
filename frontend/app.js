@@ -234,6 +234,26 @@ async function renderDashboard() {
         </div>
       </div>
 
+      <h3 class="panel-title">Orçamentos</h3>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-label">Total</div>
+          <div class="metric-value">${d.orcamentos_total}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Pendentes</div>
+          <div class="metric-value">${d.orcamentos_pendentes}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Aprovados</div>
+          <div class="metric-value" style="color:var(--green)">${d.orcamentos_aprovados}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Recusados</div>
+          <div class="metric-value" style="color:var(--red)">${d.orcamentos_recusados}</div>
+        </div>
+      </div>
+
       <h3 class="panel-title">Peças com estoque baixo</h3>
       <div class="table-wrap">
         ${

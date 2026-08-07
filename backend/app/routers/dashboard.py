@@ -45,6 +45,12 @@ def obter_dashboard(db: Session = Depends(get_db)):
         .all()
     )
 
+    def contar_orcamentos(status: str | None = None) -> int:
+        query = db.query(func.count(models.Orcamento.id))
+        if status is not None:
+            query = query.filter(models.Orcamento.status == status)
+        return query.scalar()
+
     return schemas.DashboardOut(
         os_abertas=contar_os("aberto"),
         os_em_andamento=contar_os("em_andamento"),
@@ -52,4 +58,8 @@ def obter_dashboard(db: Session = Depends(get_db)):
         faturamento_mes_atual=faturamento_mes,
         contratos_ativos=contratos_ativos,
         pecas_com_estoque_baixo=pecas_com_estoque_baixo,
+        orcamentos_total=contar_orcamentos(),
+        orcamentos_pendentes=contar_orcamentos("pendente"),
+        orcamentos_aprovados=contar_orcamentos("aprovado"),
+        orcamentos_recusados=contar_orcamentos("recusado"),
     )

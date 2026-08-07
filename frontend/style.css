@@ -52,17 +52,10 @@ body {
 }
 
 .brand-mark {
-  width: 32px;
-  height: 32px;
-  background: var(--amber);
-  color: var(--sidebar);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .brand-text {
@@ -486,3 +479,14 @@ tbody tr:hover { background: #FAFAF8; }
 }
 
 .btn-pdf:hover { text-decoration: underline; }
+
+.btn-os {
+  background: var(--amber);
+  color: #fff;
+  border-color: var(--amber);
+  font-size: 12px;
+  padding: 4px 10px;
+  font-weight: 700;
+}
+
+.btn-os:hover { opacity: 0.9; }

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -49,8 +51,16 @@ def atualizar_ordem_servico(os_id: int, dados: schemas.OrdemServicoUpdate, db: S
     os_ = db.get(models.OrdemServico, os_id)
     if not os_:
         raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
-    for campo, valor in dados.model_dump(exclude_unset=True).items():
+    campos = dados.model_dump(exclude_unset=True)
+    for campo, valor in campos.items():
         setattr(os_, campo, valor)
+
+    # Se o status virou "concluído" e nenhuma data de conclusão foi informada
+    # nessa mesma atualização, registra a data de hoje automaticamente —
+    # é esse campo que o dashboard usa para calcular o faturamento do mês.
+    if campos.get("status") == "concluido" and "data_conclusao" not in campos:
+        os_.data_conclusao = datetime.utcnow()
+
     db.commit()
     db.refresh(os_)
     return os_

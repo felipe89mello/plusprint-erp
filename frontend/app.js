@@ -192,12 +192,27 @@ function formatDate(v) {
   return new Date(v).toLocaleDateString("pt-BR");
 }
 
+function labelForItem(item) {
+  if (!item) return "";
+  if (item.nome) return item.nome;
+  if (item.descricao) return item.descricao;
+  if (item.descricao_itens) return item.descricao_itens;
+  if (item.marca && item.modelo) {
+    return `${item.marca} ${item.modelo}${item.numero_serie ? " — SN " + item.numero_serie : ""}`;
+  }
+  if ("defeitos_constatados" in item) {
+    // é um Orçamento — identifica pelo número da proposta (ou id, se numero não foi preenchido)
+    return `Orçamento nº ${item.numero || item.id}`;
+  }
+  return `#${item.id}`;
+}
+
 function relationLabel(entityKey, id) {
   if (id == null) return "—";
   const list = cache[entityKey] || [];
   const item = list.find((i) => i.id === id);
   if (!item) return `#${id}`;
-  return item.nome || item.descricao || item.descricao_itens || `#${id}`;
+  return labelForItem(item);
 }
 
 // ---------------------------------------------------------------
@@ -331,8 +346,17 @@ async function renderList(viewKey) {
             return `<td class="${cls}" ${style}>${value}</td>`;
           })
           .join("");
-        const pdfBtn = viewKey === "orcamentos" ? `<button class="btn btn-pdf" data-pdf="${item.id}">PDF</button>` : "";
-        return `<tr>${cells}<td class="row-actions">${pdfBtn}<button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
+        const pdfBtn =
+          viewKey === "orcamentos"
+            ? `<button class="btn btn-pdf" data-pdf="${item.id}">PDF</button>`
+            : viewKey === "ordens"
+            ? `<button class="btn btn-pdf" data-pdf-os="${item.id}">PDF</button>`
+            : "";
+        const osBtn =
+          viewKey === "orcamentos" && item.status === "aprovado"
+            ? `<button class="btn btn-os" data-gerar-os="${item.id}">Gerar OS</button>`
+            : "";
+        return `<tr>${cells}<td class="row-actions">${pdfBtn}${osBtn}<button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
       })
       .join("");
 
@@ -351,6 +375,15 @@ async function renderList(viewKey) {
     root.querySelectorAll("[data-pdf]").forEach((btn) => {
       btn.addEventListener("click", () => window.open(`${API_BASE}/orcamentos/${btn.dataset.pdf}/pdf`, "_blank"));
     });
+    root.querySelectorAll("[data-pdf-os]").forEach((btn) => {
+      btn.addEventListener("click", () => window.open(`${API_BASE}/ordens-servico/${btn.dataset.pdfOs}/pdf`, "_blank"));
+    });
+    root.querySelectorAll("[data-gerar-os]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const item = items.find((i) => String(i.id) === btn.dataset.gerarOs);
+        handleGerarOS(item);
+      });
+    });
     root.querySelectorAll("[data-edit]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const item = items.find((i) => String(i.id) === btn.dataset.edit);
@@ -361,6 +394,27 @@ async function renderList(viewKey) {
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar os dados. A API está rodando?</div>`;
   }
+}
+
+function montarDescricaoOS(orcamento) {
+  const partes = [];
+  if (orcamento.defeitos_constatados) partes.push(`Diagnóstico: ${orcamento.defeitos_constatados}`);
+  if (orcamento.solucao_adotada) partes.push(`Solução: ${orcamento.solucao_adotada}`);
+  if (partes.length === 0 && orcamento.itens && orcamento.itens.length) {
+    partes.push(`Serviço conforme orçamento nº ${orcamento.numero || orcamento.id}: ` + orcamento.itens.map((i) => i.descricao).join(", "));
+  }
+  return partes.join("\n") || `Atendimento referente ao orçamento nº ${orcamento.numero || orcamento.id}`;
+}
+
+async function handleGerarOS(orcamento) {
+  const prefill = {
+    cliente_id: orcamento.cliente_id,
+    equipamento_id: orcamento.equipamento_id || "",
+    orcamento_id: orcamento.id,
+    descricao: montarDescricaoOS(orcamento),
+    status: "aberto",
+  };
+  await openModal("ordens", null, prefill);
 }
 
 async function handleDelete(viewKey, id) {
@@ -379,7 +433,7 @@ async function handleDelete(viewKey, id) {
 // Modal de criação
 // ---------------------------------------------------------------
 
-async function openModal(viewKey, existingItem = null) {
+async function openModal(viewKey, existingItem = null, prefillData = null) {
   const config = ENTITIES[viewKey];
   await preloadRelations(config);
 
@@ -391,14 +445,14 @@ async function openModal(viewKey, existingItem = null) {
   form.innerHTML =
     config.fields
       .map((f) => {
-        let currentValue = isEdit ? existingItem[f.name] : undefined;
+        let currentValue = isEdit ? existingItem[f.name] : prefillData ? prefillData[f.name] : undefined;
         if (isEdit && f.listInt && Array.isArray(currentValue)) currentValue = currentValue.join(", ");
         const valueAttr = currentValue != null ? String(currentValue) : "";
 
         if (f.type === "select") {
           const options = f.relation
             ? (cache[f.relation] || []).map(
-                (i) => `<option value="${i.id}" ${String(i.id) === valueAttr ? "selected" : ""}>${i.nome || i.descricao || i.descricao_itens || "#" + i.id}</option>`
+                (i) => `<option value="${i.id}" ${String(i.id) === valueAttr ? "selected" : ""}>${labelForItem(i)}</option>`
               )
             : f.options.map((o) => `<option value="${o}" ${o === valueAttr ? "selected" : ""}>${o}</option>`);
           return `<div class="field">
@@ -451,7 +505,7 @@ async function openModal(viewKey, existingItem = null) {
         showAlert("Registro criado com sucesso.", "success");
       }
       closeModal();
-      renderList(viewKey);
+      switchView(viewKey);
     } catch (e) {
       showAlert(e.message);
     }
@@ -506,7 +560,7 @@ async function openOrcamentoModal(existingItem) {
     .map((c) => `<option value="${c.id}" ${isEdit && c.id === existingItem.cliente_id ? "selected" : ""}>${c.nome}</option>`)
     .join("");
   const equipamentosOptions = (cache.equipamentos || [])
-    .map((e) => `<option value="${e.id}" ${isEdit && e.id === existingItem.equipamento_id ? "selected" : ""}>${e.marca} ${e.modelo}</option>`)
+    .map((e) => `<option value="${e.id}" ${isEdit && e.id === existingItem.equipamento_id ? "selected" : ""}>${labelForItem(e)}</option>`)
     .join("");
 
   const v = (campo, def = "") => (isEdit && existingItem[campo] != null ? existingItem[campo] : def);

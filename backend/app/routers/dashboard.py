@@ -25,10 +25,11 @@ def obter_dashboard(db: Session = Depends(get_db)):
     faturamento_mes = (
         db.query(func.coalesce(func.sum(models.ItemOrcamento.quantidade * models.ItemOrcamento.valor_unitario), 0))
         .join(models.Orcamento, models.ItemOrcamento.orcamento_id == models.Orcamento.id)
+        .join(models.OrdemServico, models.OrdemServico.orcamento_id == models.Orcamento.id)
         .filter(
-            models.Orcamento.status == "aprovado",
-            extract("year", models.Orcamento.data) == agora.year,
-            extract("month", models.Orcamento.data) == agora.month,
+            models.OrdemServico.status == "concluido",
+            extract("year", models.OrdemServico.data_conclusao) == agora.year,
+            extract("month", models.OrdemServico.data_conclusao) == agora.month,
         )
         .scalar()
     )

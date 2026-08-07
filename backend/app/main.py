@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 from app import models  # noqa: F401  (garante que os modelos sejam registrados)
-from app.routers import clientes, equipamentos, ordens_servico, orcamentos, contratos, pecas, dashboard, orcamento_pdf
+from app.routers import clientes, equipamentos, ordens_servico, orcamentos, contratos, pecas, dashboard, orcamento_pdf, os_pdf
 
 Base.metadata.create_all(bind=engine)
 
@@ -19,6 +19,7 @@ app.add_middleware(
 app.include_router(clientes.router)
 app.include_router(equipamentos.router)
 app.include_router(ordens_servico.router)
+app.include_router(os_pdf.router)
 app.include_router(orcamentos.router)
 app.include_router(orcamento_pdf.router)
 app.include_router(contratos.router)

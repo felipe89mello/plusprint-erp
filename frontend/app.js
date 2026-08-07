@@ -314,7 +314,7 @@ async function renderList(viewKey) {
             return `<td class="${cls}" ${style}>${value}</td>`;
           })
           .join("");
-        return `<tr>${cells}<td><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
+        return `<tr>${cells}<td class="row-actions"><button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
       })
       .join("");
 
@@ -329,6 +329,12 @@ async function renderList(viewKey) {
 
     root.querySelectorAll("[data-delete]").forEach((btn) => {
       btn.addEventListener("click", () => handleDelete(viewKey, btn.dataset.delete));
+    });
+    root.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const item = items.find((i) => String(i.id) === btn.dataset.edit);
+        openModal(viewKey, item);
+      });
     });
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar os dados. A API está rodando?</div>`;
@@ -351,25 +357,32 @@ async function handleDelete(viewKey, id) {
 // Modal de criação
 // ---------------------------------------------------------------
 
-async function openModal(viewKey) {
+async function openModal(viewKey, existingItem = null) {
   const config = ENTITIES[viewKey];
   await preloadRelations(config);
 
-  document.getElementById("modal-title").textContent = `Novo — ${config.title}`;
+  const isEdit = existingItem != null;
+  document.getElementById("modal-title").textContent = `${isEdit ? "Editar" : "Novo"} — ${config.title}`;
   const form = document.getElementById("modal-form");
   form.setAttribute("autocomplete", "off");
 
   form.innerHTML =
     config.fields
       .map((f) => {
+        let currentValue = isEdit ? existingItem[f.name] : undefined;
+        if (isEdit && f.listInt && Array.isArray(currentValue)) currentValue = currentValue.join(", ");
+        const valueAttr = currentValue != null ? String(currentValue) : "";
+
         if (f.type === "select") {
           const options = f.relation
-            ? (cache[f.relation] || []).map((i) => `<option value="${i.id}">${i.nome || i.descricao || i.descricao_itens || "#" + i.id}</option>`)
-            : f.options.map((o) => `<option value="${o}">${o}</option>`);
+            ? (cache[f.relation] || []).map(
+                (i) => `<option value="${i.id}" ${String(i.id) === valueAttr ? "selected" : ""}>${i.nome || i.descricao || i.descricao_itens || "#" + i.id}</option>`
+              )
+            : f.options.map((o) => `<option value="${o}" ${o === valueAttr ? "selected" : ""}>${o}</option>`);
           return `<div class="field">
             <label>${f.label}${f.required ? " *" : ""}</label>
             <select name="${f.name}" ${f.required ? "required" : ""}>
-              ${f.relation ? '<option value="">Selecione...</option>' : ""}
+              ${f.relation ? `<option value="">Selecione...</option>` : ""}
               ${options.join("")}
             </select>
           </div>`;
@@ -377,12 +390,12 @@ async function openModal(viewKey) {
         if (f.type === "textarea") {
           return `<div class="field">
             <label>${f.label}${f.required ? " *" : ""}</label>
-            <textarea name="${f.name}" ${f.required ? "required" : ""}></textarea>
+            <textarea name="${f.name}" ${f.required ? "required" : ""}>${valueAttr}</textarea>
           </div>`;
         }
         return `<div class="field">
           <label>${f.label}${f.required ? " *" : ""}</label>
-          <input type="${f.type}" name="${f.name}" ${f.type === "number" ? 'step="0.01"' : ""} ${f.required ? "required" : ""}>
+          <input type="${f.type}" name="${f.name}" value="${valueAttr}" ${f.type === "number" ? 'step="0.01"' : ""} ${f.required ? "required" : ""}>
         </div>`;
       })
       .join("") +
@@ -408,8 +421,13 @@ async function openModal(viewKey) {
     });
 
     try {
-      await apiSend(config.endpoint, "POST", data);
-      showAlert("Registro criado com sucesso.", "success");
+      if (isEdit) {
+        await apiSend(`${config.endpoint}${existingItem.id}`, "PUT", data);
+        showAlert("Registro atualizado com sucesso.", "success");
+      } else {
+        await apiSend(config.endpoint, "POST", data);
+        showAlert("Registro criado com sucesso.", "success");
+      }
       closeModal();
       renderList(viewKey);
     } catch (e) {

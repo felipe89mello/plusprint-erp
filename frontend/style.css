@@ -191,6 +191,21 @@ body {
   padding: 4px 8px;
 }
 
+.btn-edit {
+  background: transparent;
+  color: var(--ink-soft);
+  border-color: transparent;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.btn-edit:hover { color: var(--ink); }
+
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
 /* ---------- Alert ---------- */
 
 .alert-box {

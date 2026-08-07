@@ -54,7 +54,7 @@ const ENTITIES = {
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
       { key: "descricao", label: "Descrição" },
       { key: "status", label: "Status", badge: true },
-      { key: "data_abertura", label: "Abertura", date: true },
+      { key: "data_abertura", label: "Data de abertura", date: true },
     ],
     fields: [
       { name: "cliente_id", label: "Cliente", type: "select", relation: "clientes", required: true },
@@ -62,6 +62,7 @@ const ENTITIES = {
       { name: "orcamento_id", label: "Orçamento de origem (opcional)", type: "select", relation: "orcamentos" },
       { name: "descricao", label: "Descrição", type: "textarea", required: true },
       { name: "status", label: "Status", type: "select", options: ["aberto", "em_andamento", "concluido"] },
+      { name: "data_abertura", label: "Data de abertura (opcional — padrão: hoje)", type: "date" },
     ],
   },
 
@@ -73,6 +74,7 @@ const ENTITIES = {
       { key: "id", label: "ID", mono: true },
       { key: "numero", label: "Nº" },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
+      { key: "data", label: "Emissão", date: true },
       { key: "valor_total", label: "Valor", money: true },
       { key: "status", label: "Status", badge: true },
     ],
@@ -501,6 +503,7 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
       .map((f) => {
         let currentValue = isEdit ? existingItem[f.name] : prefillData ? prefillData[f.name] : undefined;
         if (isEdit && f.listInt && Array.isArray(currentValue)) currentValue = currentValue.join(", ");
+        if (f.type === "date" && typeof currentValue === "string") currentValue = currentValue.slice(0, 10);
         const valueAttr = currentValue != null ? String(currentValue) : "";
 
         if (f.type === "select") {
@@ -647,7 +650,10 @@ async function openOrcamentoModal(existingItem) {
       </div>
     </div>
 
-    <div class="field"><label>Local</label><input type="text" name="local_equipamento" value="${v("local_equipamento")}" placeholder="ex: Loja Mooca"></div>
+    <div class="field-row">
+      <div class="field"><label>Data de emissão</label><input type="date" name="data" value="${v("data").slice(0, 10)}" placeholder="hoje"></div>
+      <div class="field"><label>Local</label><input type="text" name="local_equipamento" value="${v("local_equipamento")}" placeholder="ex: Loja Mooca"></div>
+    </div>
 
     <label class="field-label-block">Equipamentos — defeito e solução de cada um</label>
     <div class="picker-row">
@@ -776,6 +782,7 @@ async function openOrcamentoModal(existingItem) {
 
     if (data.cliente_id === "") delete data.cliente_id;
     else data.cliente_id = Number(data.cliente_id);
+    if (data.data === "") delete data.data;
     ["validade_dias", "garantia_dias"].forEach((k) => { data[k] = Number(data[k]); });
 
     syncEquipCardsFromDom();

@@ -72,7 +72,7 @@ class OrdemServicoBase(BaseModel):
 
 
 class OrdemServicoCreate(OrdemServicoBase):
-    pass
+    data_abertura: Optional[datetime] = None  # se não informado, usa a data/hora atual
 
 
 class OrdemServicoUpdate(BaseModel):
@@ -80,6 +80,7 @@ class OrdemServicoUpdate(BaseModel):
     orcamento_id: Optional[int] = None
     descricao: Optional[str] = None
     status: Optional[str] = None
+    data_abertura: Optional[datetime] = None
     data_conclusao: Optional[datetime] = None
 
 
@@ -142,6 +143,7 @@ class OrcamentoBase(BaseModel):
 class OrcamentoCreate(OrcamentoBase):
     itens: list[ItemOrcamentoCreate] = []
     equipamentos: list[OrcamentoEquipamentoItem] = []
+    data: Optional[datetime] = None  # se não informado, usa a data/hora atual (emissão)
 
 
 class OrcamentoUpdate(BaseModel):
@@ -157,6 +159,7 @@ class OrcamentoUpdate(BaseModel):
     status: Optional[str] = None
     itens: Optional[list[ItemOrcamentoCreate]] = None
     equipamentos: Optional[list[OrcamentoEquipamentoItem]] = None
+    data: Optional[datetime] = None
 
 
 class OrcamentoOut(OrcamentoBase):

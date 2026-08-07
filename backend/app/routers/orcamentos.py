@@ -47,6 +47,8 @@ def criar_orcamento(orcamento: schemas.OrcamentoCreate, db: Session = Depends(ge
         raise HTTPException(status_code=400, detail="Cliente informado não existe")
 
     dados = orcamento.model_dump(exclude={"itens", "equipamentos"})
+    if dados.get("data") is None:
+        dados.pop("data", None)  # deixa o default do model (agora) valer
     novo = models.Orcamento(**dados)
     novo.itens = [
         models.ItemOrcamento(quantidade=i.quantidade, descricao=i.descricao, valor_unitario=i.valor_unitario)

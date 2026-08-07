@@ -17,7 +17,10 @@ def criar_ordem_servico(os_: schemas.OrdemServicoCreate, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Equipamento informado não existe")
     if os_.orcamento_id and not db.get(models.Orcamento, os_.orcamento_id):
         raise HTTPException(status_code=400, detail="Orçamento informado não existe")
-    nova = models.OrdemServico(**os_.model_dump())
+    dados = os_.model_dump()
+    if dados.get("data_abertura") is None:
+        dados.pop("data_abertura", None)  # deixa o default do model (agora) valer
+    nova = models.OrdemServico(**dados)
     db.add(nova)
     db.commit()
     db.refresh(nova)

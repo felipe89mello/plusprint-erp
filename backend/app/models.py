@@ -21,7 +21,7 @@ class Cliente(Base):
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(150), nullable=False)
     cnpj_cpf = Column(String(20), unique=True, nullable=True)
-    telefone = Column(String(20), nullable=True)
+    telefone = Column(String(60), nullable=True)
     email = Column(String(150), nullable=True)
     endereco = Column(String(250), nullable=True)
 

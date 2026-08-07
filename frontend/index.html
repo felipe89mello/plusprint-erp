@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plusprint ERP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">+</span>
+      <div class="brand-text">
+        <strong>Plusprint</strong>
+        <span>ERP</span>
+      </div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <button class="nav-item active" data-view="dashboard">
+        <span class="nav-dot"></span> Dashboard
+      </button>
+      <button class="nav-item" data-view="clientes">
+        <span class="nav-dot"></span> Clientes
+      </button>
+      <button class="nav-item" data-view="equipamentos">
+        <span class="nav-dot"></span> Equipamentos
+      </button>
+      <button class="nav-item" data-view="ordens">
+        <span class="nav-dot"></span> Ordens de Serviço
+      </button>
+      <button class="nav-item" data-view="orcamentos">
+        <span class="nav-dot"></span> Orçamentos
+      </button>
+      <button class="nav-item" data-view="contratos">
+        <span class="nav-dot"></span> Contratos
+      </button>
+      <button class="nav-item" data-view="pecas">
+        <span class="nav-dot"></span> Peças / Estoque
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span id="api-status" class="api-status">
+        <span class="light"></span> verificando API...
+      </span>
+    </div>
+  </aside>
+
+  <main class="content">
+    <header class="content-header">
+      <h1 id="view-title">Dashboard</h1>
+      <button class="btn btn-primary" id="btn-novo">+ Novo</button>
+    </header>
+
+    <div id="alert-box" class="alert-box hidden"></div>
+
+    <section id="view-root" class="view-root">
+      <!-- conteúdo injetado via JS -->
+    </section>
+  </main>
+</div>
+
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Novo registro</h2>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <form id="modal-form" class="modal-form"></form>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

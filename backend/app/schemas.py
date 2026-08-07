@@ -114,13 +114,21 @@ class ItemOrcamentoOut(ItemOrcamentoCreate):
         )
 
 
+class OrcamentoEquipamentoItem(BaseModel):
+    equipamento_id: int
+    defeitos_constatados: Optional[str] = None
+    solucao_adotada: Optional[str] = None
+
+
+class OrcamentoEquipamentoOut(OrcamentoEquipamentoItem):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
 class OrcamentoBase(BaseModel):
     numero: Optional[str] = None
     cliente_id: int
-    equipamento_id: Optional[int] = None
     local_equipamento: Optional[str] = None
-    defeitos_constatados: Optional[str] = None
-    solucao_adotada: Optional[str] = None
     observacoes: Optional[str] = None
     validade_dias: int = 5
     condicoes_pagamento: Optional[str] = None
@@ -133,14 +141,12 @@ class OrcamentoBase(BaseModel):
 
 class OrcamentoCreate(OrcamentoBase):
     itens: list[ItemOrcamentoCreate] = []
+    equipamentos: list[OrcamentoEquipamentoItem] = []
 
 
 class OrcamentoUpdate(BaseModel):
     numero: Optional[str] = None
-    equipamento_id: Optional[int] = None
     local_equipamento: Optional[str] = None
-    defeitos_constatados: Optional[str] = None
-    solucao_adotada: Optional[str] = None
     observacoes: Optional[str] = None
     validade_dias: Optional[int] = None
     condicoes_pagamento: Optional[str] = None
@@ -150,6 +156,7 @@ class OrcamentoUpdate(BaseModel):
     tecnico_responsavel: Optional[str] = None
     status: Optional[str] = None
     itens: Optional[list[ItemOrcamentoCreate]] = None
+    equipamentos: Optional[list[OrcamentoEquipamentoItem]] = None
 
 
 class OrcamentoOut(OrcamentoBase):
@@ -158,6 +165,7 @@ class OrcamentoOut(OrcamentoBase):
     data: datetime
     itens: list[ItemOrcamentoOut] = []
     valor_total: Decimal = Decimal("0")
+    equipamentos: list[OrcamentoEquipamentoOut] = []
 
     @classmethod
     def from_model(cls, orcamento):
@@ -166,6 +174,7 @@ class OrcamentoOut(OrcamentoBase):
         data["data"] = orcamento.data
         data["itens"] = [ItemOrcamentoOut.from_model(i) for i in orcamento.itens]
         data["valor_total"] = sum((i.quantidade * i.valor_unitario for i in orcamento.itens), Decimal("0"))
+        data["equipamentos"] = [OrcamentoEquipamentoOut.model_validate(v) for v in orcamento.itens_equipamento]
         return cls(**data)
 
 
@@ -215,6 +224,7 @@ class PecaBase(BaseModel):
     nome: str
     quantidade_estoque: int = 0
     valor_unitario: Decimal
+    valor_compra: Optional[Decimal] = None
 
 
 class PecaCreate(PecaBase):
@@ -225,6 +235,7 @@ class PecaUpdate(BaseModel):
     nome: Optional[str] = None
     quantidade_estoque: Optional[int] = None
     valor_unitario: Optional[Decimal] = None
+    valor_compra: Optional[Decimal] = None
 
 
 class PecaOut(PecaBase):
@@ -247,6 +258,7 @@ class ItemPecaOSOut(BaseModel):
     peca_id: int
     quantidade_usada: int
     valor_unitario_na_epoca: Decimal
+    custo_unitario_na_epoca: Decimal
     data_uso: datetime
 
 
@@ -263,3 +275,8 @@ class DashboardOut(BaseModel):
     orcamentos_pendentes: int
     orcamentos_aprovados: int
     orcamentos_recusados: int
+    custo_pecas_mes: Decimal
+    liquido_mes: Decimal
+    faturamento_ano: Decimal
+    custo_pecas_ano: Decimal
+    liquido_ano: Decimal

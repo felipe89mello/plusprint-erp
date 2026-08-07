@@ -45,6 +45,7 @@ class Equipamento(Base):
     cliente = relationship("Cliente", back_populates="equipamentos")
     ordens_servico = relationship("OrdemServico", back_populates="equipamento")
     contratos = relationship("Contrato", secondary=contrato_equipamento, back_populates="equipamentos")
+    orcamento_vinculos = relationship("OrcamentoEquipamento", back_populates="equipamento")
 
 
 class OrdemServico(Base):
@@ -71,11 +72,8 @@ class Orcamento(Base):
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(String(20), nullable=True)  # nº da proposta comercial (ex: "084")
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
-    equipamento_id = Column(Integer, ForeignKey("equipamentos.id"), nullable=True)
     local_equipamento = Column(String(150), nullable=True)  # ex: "Loja Mooca"
 
-    defeitos_constatados = Column(Text, nullable=True)
-    solucao_adotada = Column(Text, nullable=True)
     observacoes = Column(Text, nullable=True)
 
     validade_dias = Column(Integer, default=5)
@@ -89,9 +87,26 @@ class Orcamento(Base):
     data = Column(DateTime, default=datetime.utcnow)
 
     cliente = relationship("Cliente", back_populates="orcamentos")
-    equipamento = relationship("Equipamento")
+    itens_equipamento = relationship("OrcamentoEquipamento", back_populates="orcamento", cascade="all, delete-orphan")
     ordens_servico = relationship("OrdemServico", back_populates="orcamento")
     itens = relationship("ItemOrcamento", back_populates="orcamento", cascade="all, delete-orphan")
+
+
+class OrcamentoEquipamento(Base):
+    """Vincula um equipamento ao orçamento, com diagnóstico e solução PRÓPRIOS
+    daquele equipamento — permite orçar várias impressoras juntas, cada uma
+    com seu defeito e solução, em vez de um texto único para tudo."""
+
+    __tablename__ = "orcamento_equipamento"
+
+    id = Column(Integer, primary_key=True, index=True)
+    orcamento_id = Column(Integer, ForeignKey("orcamentos.id"), nullable=False)
+    equipamento_id = Column(Integer, ForeignKey("equipamentos.id"), nullable=False)
+    defeitos_constatados = Column(Text, nullable=True)
+    solucao_adotada = Column(Text, nullable=True)
+
+    orcamento = relationship("Orcamento", back_populates="itens_equipamento")
+    equipamento = relationship("Equipamento", back_populates="orcamento_vinculos")
 
 
 class ItemOrcamento(Base):
@@ -131,7 +146,8 @@ class Peca(Base):
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(150), nullable=False)
     quantidade_estoque = Column(Integer, nullable=False, default=0)
-    valor_unitario = Column(Numeric(10, 2), nullable=False)
+    valor_unitario = Column(Numeric(10, 2), nullable=False)  # preço de venda
+    valor_compra = Column(Numeric(10, 2), nullable=True)  # quanto você pagou (custo)
 
     itens_os = relationship("ItemPecaOS", back_populates="peca")
 
@@ -143,7 +159,8 @@ class ItemPecaOS(Base):
     ordem_servico_id = Column(Integer, ForeignKey("ordens_servico.id"), nullable=False)
     peca_id = Column(Integer, ForeignKey("pecas.id"), nullable=False)
     quantidade_usada = Column(Integer, nullable=False)
-    valor_unitario_na_epoca = Column(Numeric(10, 2), nullable=False)
+    valor_unitario_na_epoca = Column(Numeric(10, 2), nullable=False)  # preço de venda "congelado"
+    custo_unitario_na_epoca = Column(Numeric(10, 2), nullable=False, default=0)  # custo "congelado"
     data_uso = Column(DateTime, default=datetime.utcnow)
 
     ordem_servico = relationship("OrdemServico", back_populates="itens_peca")

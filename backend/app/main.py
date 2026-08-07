@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
 from app import models  # noqa: F401  (garante que os modelos sejam registrados)
 from app.routers import clientes, equipamentos, ordens_servico, orcamentos, contratos, pecas, dashboard, orcamento_pdf, os_pdf
 
-Base.metadata.create_all(bind=engine)
+# A criação/alteração de tabelas agora é feita pelo Alembic (migrations/), não
+# mais automaticamente aqui — veja o README para o fluxo de migração.
 
 app = FastAPI(title="Plusprint ERP", version="0.1.0")
 

@@ -107,12 +107,14 @@ const ENTITIES = {
       { key: "id", label: "ID", mono: true },
       { key: "nome", label: "Nome" },
       { key: "quantidade_estoque", label: "Estoque", mono: true, lowStock: true },
-      { key: "valor_unitario", label: "Valor unitário", money: true },
+      { key: "valor_compra", label: "Custo (compra)", money: true },
+      { key: "valor_unitario", label: "Valor de venda", money: true },
     ],
     fields: [
       { name: "nome", label: "Nome", type: "text", required: true },
       { name: "quantidade_estoque", label: "Quantidade em estoque", type: "number", required: true },
-      { name: "valor_unitario", label: "Valor unitário (R$)", type: "number", required: true },
+      { name: "valor_compra", label: "Valor de compra / custo (R$)", type: "number" },
+      { name: "valor_unitario", label: "Valor de venda (R$)", type: "number", required: true },
     ],
   },
 };
@@ -200,7 +202,7 @@ function labelForItem(item) {
   if (item.marca && item.modelo) {
     return `${item.marca} ${item.modelo}${item.numero_serie ? " — SN " + item.numero_serie : ""}`;
   }
-  if ("defeitos_constatados" in item) {
+  if (item.itens !== undefined) {
     // é um Orçamento — identifica pelo número da proposta (ou id, se numero não foi preenchido)
     return `Orçamento nº ${item.numero || item.id}`;
   }
@@ -238,10 +240,6 @@ async function renderDashboard() {
         <div class="metric-card">
           <div class="metric-label">OS concluídas</div>
           <div class="metric-value">${d.os_concluidas}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Faturamento do mês</div>
-          <div class="metric-value amber">${formatMoney(d.faturamento_mes_atual)}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Contratos ativos</div>
@@ -293,6 +291,50 @@ async function renderDashboard() {
     `;
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar o dashboard. A API está rodando?</div>`;
+  }
+}
+
+async function renderFinanceiro() {
+  const root = document.getElementById("view-root");
+  root.innerHTML = `<div class="empty-state">Carregando indicadores...</div>`;
+
+  try {
+    const d = await apiGet("/dashboard/");
+    root.innerHTML = `
+      <h3 class="panel-title">Este mês</h3>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-label">Faturamento</div>
+          <div class="metric-value amber">${formatMoney(d.faturamento_mes_atual)}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Custo de peças</div>
+          <div class="metric-value" style="color:var(--red)">${formatMoney(d.custo_pecas_mes)}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Líquido</div>
+          <div class="metric-value" style="color:var(--green)">${formatMoney(d.liquido_mes)}</div>
+        </div>
+      </div>
+
+      <h3 class="panel-title">Este ano</h3>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-label">Faturamento</div>
+          <div class="metric-value amber">${formatMoney(d.faturamento_ano)}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Custo de peças</div>
+          <div class="metric-value" style="color:var(--red)">${formatMoney(d.custo_pecas_ano)}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Líquido</div>
+          <div class="metric-value" style="color:var(--green)">${formatMoney(d.liquido_ano)}</div>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    root.innerHTML = `<div class="empty-state">Não foi possível carregar os dados financeiros. A API está rodando?</div>`;
   }
 }
 
@@ -397,19 +439,31 @@ async function renderList(viewKey) {
 }
 
 function montarDescricaoOS(orcamento) {
-  const partes = [];
-  if (orcamento.defeitos_constatados) partes.push(`Diagnóstico: ${orcamento.defeitos_constatados}`);
-  if (orcamento.solucao_adotada) partes.push(`Solução: ${orcamento.solucao_adotada}`);
-  if (partes.length === 0 && orcamento.itens && orcamento.itens.length) {
-    partes.push(`Serviço conforme orçamento nº ${orcamento.numero || orcamento.id}: ` + orcamento.itens.map((i) => i.descricao).join(", "));
+  if (orcamento.equipamentos && orcamento.equipamentos.length) {
+    const blocos = orcamento.equipamentos
+      .map((eq) => {
+        const label = relationLabel("equipamentos", eq.equipamento_id);
+        const partes = [];
+        if (eq.defeitos_constatados) partes.push(`Diagnóstico: ${eq.defeitos_constatados}`);
+        if (eq.solucao_adotada) partes.push(`Solução: ${eq.solucao_adotada}`);
+        if (partes.length === 0) return "";
+        return `${label}\n${partes.join("\n")}`;
+      })
+      .filter(Boolean);
+    if (blocos.length) return blocos.join("\n\n");
   }
-  return partes.join("\n") || `Atendimento referente ao orçamento nº ${orcamento.numero || orcamento.id}`;
+  if (orcamento.itens && orcamento.itens.length) {
+    return `Serviço conforme orçamento nº ${orcamento.numero || orcamento.id}: ` + orcamento.itens.map((i) => i.descricao).join(", ");
+  }
+  return `Atendimento referente ao orçamento nº ${orcamento.numero || orcamento.id}`;
 }
 
 async function handleGerarOS(orcamento) {
+  if (!cache.equipamentos) cache.equipamentos = await apiGet(ENTITIES.equipamentos.endpoint);
+  const primeiroEquip = orcamento.equipamentos && orcamento.equipamentos[0];
   const prefill = {
     cliente_id: orcamento.cliente_id,
-    equipamento_id: orcamento.equipamento_id || "",
+    equipamento_id: (primeiroEquip && primeiroEquip.equipamento_id) || "",
     orcamento_id: orcamento.id,
     descricao: montarDescricaoOS(orcamento),
     status: "aberto",
@@ -559,9 +613,23 @@ async function openOrcamentoModal(existingItem) {
   const clientesOptions = (cache.clientes || [])
     .map((c) => `<option value="${c.id}" ${isEdit && c.id === existingItem.cliente_id ? "selected" : ""}>${c.nome}</option>`)
     .join("");
-  const equipamentosOptions = (cache.equipamentos || [])
-    .map((e) => `<option value="${e.id}" ${isEdit && e.id === existingItem.equipamento_id ? "selected" : ""}>${labelForItem(e)}</option>`)
-    .join("");
+
+  // Cada equipamento adicionado carrega seu próprio diagnóstico/solução —
+  // controlado em memória enquanto o formulário está aberto, e lido do DOM
+  // (cada card tem suas próprias textareas) só no momento de salvar.
+  let equipamentosSelecionados = isEdit
+    ? (existingItem.equipamentos || []).map((e) => ({
+        equipamento_id: e.equipamento_id,
+        defeitos_constatados: e.defeitos_constatados || "",
+        solucao_adotada: e.solucao_adotada || "",
+      }))
+    : [];
+
+  const equipamentosPickerOptions = () =>
+    (cache.equipamentos || [])
+      .filter((e) => !equipamentosSelecionados.some((s) => s.equipamento_id === e.id))
+      .map((e) => `<option value="${e.id}">${labelForItem(e)}</option>`)
+      .join("");
 
   const v = (campo, def = "") => (isEdit && existingItem[campo] != null ? existingItem[campo] : def);
   const itensExistentes = isEdit && existingItem.itens.length ? existingItem.itens : [{}];
@@ -579,15 +647,14 @@ async function openOrcamentoModal(existingItem) {
       </div>
     </div>
 
-    <div class="field-row">
-      <div class="field"><label>Equipamento</label>
-        <select name="equipamento_id"><option value="">— nenhum —</option>${equipamentosOptions}</select>
-      </div>
-      <div class="field"><label>Local</label><input type="text" name="local_equipamento" value="${v("local_equipamento")}" placeholder="ex: Loja Mooca"></div>
-    </div>
+    <div class="field"><label>Local</label><input type="text" name="local_equipamento" value="${v("local_equipamento")}" placeholder="ex: Loja Mooca"></div>
 
-    <div class="field"><label>Defeitos constatados</label><textarea name="defeitos_constatados">${v("defeitos_constatados")}</textarea></div>
-    <div class="field"><label>Solução adotada</label><textarea name="solucao_adotada">${v("solucao_adotada")}</textarea></div>
+    <label class="field-label-block">Equipamentos — defeito e solução de cada um</label>
+    <div class="picker-row">
+      <select id="equipamento-picker">${equipamentosPickerOptions()}</select>
+      <button type="button" class="btn" id="btn-add-equip">+ Adicionar</button>
+    </div>
+    <div id="equipamentos-cards"></div>
 
     <label class="field-label-block">Peças e Serviços</label>
     <table class="items-table">
@@ -632,6 +699,60 @@ async function openOrcamentoModal(existingItem) {
     recalcularSubtotal(form);
   });
 
+  function syncEquipCardsFromDom() {
+    document.querySelectorAll("[data-equip-card]").forEach((card) => {
+      const id = Number(card.dataset.equipCard);
+      const item = equipamentosSelecionados.find((e) => e.equipamento_id === id);
+      if (item) {
+        item.defeitos_constatados = card.querySelector('[data-field="defeitos_constatados"]').value;
+        item.solucao_adotada = card.querySelector('[data-field="solucao_adotada"]').value;
+      }
+    });
+  }
+
+  function renderEquipCards() {
+    const wrap = document.getElementById("equipamentos-cards");
+    wrap.innerHTML = equipamentosSelecionados.length
+      ? equipamentosSelecionados
+          .map((e) => {
+            const eq = (cache.equipamentos || []).find((x) => x.id === e.equipamento_id);
+            const label = eq ? labelForItem(eq) : `#${e.equipamento_id}`;
+            return `<div class="equip-card" data-equip-card="${e.equipamento_id}">
+              <div class="equip-card-header">
+                <strong>${label}</strong>
+                <button type="button" data-remove-equip="${e.equipamento_id}">Remover</button>
+              </div>
+              <div class="field"><label>Defeitos constatados</label><textarea data-field="defeitos_constatados">${e.defeitos_constatados || ""}</textarea></div>
+              <div class="field"><label>Solução adotada</label><textarea data-field="solucao_adotada">${e.solucao_adotada || ""}</textarea></div>
+            </div>`;
+          })
+          .join("")
+      : `<div class="chips-empty">Nenhum equipamento adicionado ainda.</div>`;
+
+    wrap.querySelectorAll("[data-remove-equip]").forEach((btn) => {
+      btn.onclick = () => {
+        syncEquipCardsFromDom();
+        equipamentosSelecionados = equipamentosSelecionados.filter((e) => e.equipamento_id !== Number(btn.dataset.removeEquip));
+        document.getElementById("equipamento-picker").innerHTML = equipamentosPickerOptions();
+        renderEquipCards();
+      };
+    });
+  }
+
+  document.getElementById("btn-add-equip").addEventListener("click", () => {
+    const picker = document.getElementById("equipamento-picker");
+    if (!picker.value) return;
+    syncEquipCardsFromDom();
+    const id = Number(picker.value);
+    if (!equipamentosSelecionados.some((e) => e.equipamento_id === id)) {
+      equipamentosSelecionados.push({ equipamento_id: id, defeitos_constatados: "", solucao_adotada: "" });
+      picker.innerHTML = equipamentosPickerOptions();
+      renderEquipCards();
+    }
+  });
+
+  renderEquipCards();
+
   function attachItemListeners(formEl) {
     formEl.querySelectorAll("[data-remove-row]").forEach((btn) => {
       btn.onclick = () => {
@@ -653,8 +774,16 @@ async function openOrcamentoModal(existingItem) {
     const fd = new FormData(form);
     const data = Object.fromEntries(fd.entries());
 
-    ["equipamento_id", "cliente_id"].forEach((k) => { if (data[k] === "") delete data[k]; else data[k] = Number(data[k]); });
+    if (data.cliente_id === "") delete data.cliente_id;
+    else data.cliente_id = Number(data.cliente_id);
     ["validade_dias", "garantia_dias"].forEach((k) => { data[k] = Number(data[k]); });
+
+    syncEquipCardsFromDom();
+    data.equipamentos = equipamentosSelecionados.map((e) => ({
+      equipamento_id: e.equipamento_id,
+      defeitos_constatados: e.defeitos_constatados || null,
+      solucao_adotada: e.solucao_adotada || null,
+    }));
 
     data.itens = [];
     form.querySelectorAll("[data-item-row]").forEach((row) => {
@@ -699,10 +828,12 @@ function switchView(viewKey) {
   });
 
   const config = ENTITIES[viewKey];
-  document.getElementById("view-title").textContent = config ? config.title : "Dashboard";
-  document.getElementById("btn-novo").classList.toggle("hidden", viewKey === "dashboard");
+  const titulos = { dashboard: "Dashboard", financeiro: "Financeiro" };
+  document.getElementById("view-title").textContent = config ? config.title : titulos[viewKey] || "";
+  document.getElementById("btn-novo").classList.toggle("hidden", viewKey === "dashboard" || viewKey === "financeiro");
 
   if (viewKey === "dashboard") renderDashboard();
+  else if (viewKey === "financeiro") renderFinanceiro();
   else renderList(viewKey);
 }
 

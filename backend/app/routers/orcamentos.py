@@ -19,19 +19,40 @@ def _substituir_itens(db: Session, orcamento: models.Orcamento, itens: list[sche
         )
 
 
+def _substituir_equipamentos(
+    db: Session, orcamento: models.Orcamento, equipamentos: list[schemas.OrcamentoEquipamentoItem]
+):
+    if equipamentos:
+        ids = [e.equipamento_id for e in equipamentos]
+        encontrados = db.query(models.Equipamento).filter(models.Equipamento.id.in_(ids)).all()
+        encontrados_ids = {e.id for e in encontrados}
+        faltando = set(ids) - encontrados_ids
+        if faltando:
+            raise HTTPException(status_code=400, detail=f"Equipamentos não encontrados: {sorted(faltando)}")
+
+    orcamento.itens_equipamento.clear()
+    for item in equipamentos:
+        orcamento.itens_equipamento.append(
+            models.OrcamentoEquipamento(
+                equipamento_id=item.equipamento_id,
+                defeitos_constatados=item.defeitos_constatados,
+                solucao_adotada=item.solucao_adotada,
+            )
+        )
+
+
 @router.post("/", response_model=schemas.OrcamentoOut, status_code=201)
 def criar_orcamento(orcamento: schemas.OrcamentoCreate, db: Session = Depends(get_db)):
     if not db.get(models.Cliente, orcamento.cliente_id):
         raise HTTPException(status_code=400, detail="Cliente informado não existe")
-    if orcamento.equipamento_id and not db.get(models.Equipamento, orcamento.equipamento_id):
-        raise HTTPException(status_code=400, detail="Equipamento informado não existe")
 
-    dados = orcamento.model_dump(exclude={"itens"})
+    dados = orcamento.model_dump(exclude={"itens", "equipamentos"})
     novo = models.Orcamento(**dados)
     novo.itens = [
         models.ItemOrcamento(quantidade=i.quantidade, descricao=i.descricao, valor_unitario=i.valor_unitario)
         for i in orcamento.itens
     ]
+    _substituir_equipamentos(db, novo, orcamento.equipamentos)
 
     db.add(novo)
     db.commit()
@@ -67,15 +88,15 @@ def atualizar_orcamento(orcamento_id: int, dados: schemas.OrcamentoUpdate, db: S
     if not orcamento:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
 
-    if dados.equipamento_id is not None and not db.get(models.Equipamento, dados.equipamento_id):
-        raise HTTPException(status_code=400, detail="Equipamento informado não existe")
-
-    campos = dados.model_dump(exclude_unset=True, exclude={"itens"})
+    campos = dados.model_dump(exclude_unset=True, exclude={"itens", "equipamentos"})
     for campo, valor in campos.items():
         setattr(orcamento, campo, valor)
 
     if dados.itens is not None:
         _substituir_itens(db, orcamento, dados.itens)
+
+    if dados.equipamentos is not None:
+        _substituir_equipamentos(db, orcamento, dados.equipamentos)
 
     db.commit()
     db.refresh(orcamento)

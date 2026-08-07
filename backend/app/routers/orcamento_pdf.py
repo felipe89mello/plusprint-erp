@@ -100,29 +100,30 @@ def _gerar_pdf_bytes(orcamento: models.Orcamento) -> bytes:
     ]))
     story.append(t)
 
-    # Equipamento
-    if orcamento.equipamento or orcamento.local_equipamento:
-        story.append(Paragraph("Dados do Equipamento", section_style))
-        eq = orcamento.equipamento
-        eq_rows = []
-        if eq:
-            eq_rows.append(linha("Marca / Modelo", f"{eq.marca} {eq.modelo}"))
-            if eq.numero_serie:
-                eq_rows.append(linha("Serial", eq.numero_serie))
+    # Equipamento(s) — cada um com seu próprio diagnóstico e solução
+    if orcamento.itens_equipamento or orcamento.local_equipamento:
+        titulo_eq = "Equipamento" if len(orcamento.itens_equipamento) <= 1 else "Equipamentos"
+        story.append(Paragraph(titulo_eq, section_style))
+
         if orcamento.local_equipamento:
-            eq_rows.append(linha("Local", orcamento.local_equipamento))
-        t = Table(eq_rows, colWidths=[30 * mm, 140 * mm])
-        t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-        story.append(t)
+            story.append(Paragraph(f"Local: {orcamento.local_equipamento}", label_style))
+            story.append(Spacer(1, 4))
 
-    # Diagnóstico
-    if orcamento.defeitos_constatados:
-        story.append(Paragraph("Defeitos Constatados", section_style))
-        story.append(Paragraph(orcamento.defeitos_constatados, body_style))
+        eq_nome_style = ParagraphStyle("eq_nome", parent=styles["Normal"], fontSize=10, fontName="Helvetica-Bold", textColor=INK, spaceBefore=6)
+        eq_label_style = ParagraphStyle("eq_label", parent=styles["Normal"], fontSize=8.5, fontName="Helvetica-Bold", textColor=colors.grey, spaceBefore=3)
 
-    if orcamento.solucao_adotada:
-        story.append(Paragraph("Solução Adotada", section_style))
-        story.append(Paragraph(orcamento.solucao_adotada, body_style))
+        for vinculo in orcamento.itens_equipamento:
+            eq = vinculo.equipamento
+            nome_eq = f"{eq.marca} {eq.modelo}" if eq else "Equipamento"
+            if eq and eq.numero_serie:
+                nome_eq += f" — SN {eq.numero_serie}"
+            story.append(Paragraph(nome_eq, eq_nome_style))
+            if vinculo.defeitos_constatados:
+                story.append(Paragraph("Defeitos constatados:", eq_label_style))
+                story.append(Paragraph(vinculo.defeitos_constatados, body_style))
+            if vinculo.solucao_adotada:
+                story.append(Paragraph("Solução adotada:", eq_label_style))
+                story.append(Paragraph(vinculo.solucao_adotada, body_style))
 
     # Itens
     story.append(Paragraph("Peças e Serviços", section_style))

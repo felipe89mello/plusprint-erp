@@ -74,7 +74,8 @@ def registrar_uso_em_os(item: schemas.ItemPecaOSCreate, db: Session = Depends(ge
         ordem_servico_id=item.ordem_servico_id,
         peca_id=item.peca_id,
         quantidade_usada=item.quantidade_usada,
-        valor_unitario_na_epoca=peca.valor_unitario,  # "congela" o preço atual
+        valor_unitario_na_epoca=peca.valor_unitario,  # "congela" o preço de venda atual
+        custo_unitario_na_epoca=peca.valor_compra or 0,  # "congela" o custo atual
     )
     peca.quantidade_estoque -= item.quantidade_usada
 

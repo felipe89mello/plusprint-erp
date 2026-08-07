@@ -1,4 +1,7 @@
 import io
+import os
+import re
+import unicodedata
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -7,6 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
+    Image,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -23,6 +27,15 @@ router = APIRouter(prefix="/orcamentos", tags=["Orçamentos"])
 AMBER = colors.HexColor("#B97A1E")
 INK = colors.HexColor("#1C1E22")
 LINE = colors.HexColor("#CFCFC8")
+
+LOGO_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "logo.png")
+
+
+def _slugify(texto: str) -> str:
+    """Converte 'PIXIE ARTEMODA LTDA.' em 'pixie_artemoda_ltda' — seguro para nome de arquivo."""
+    sem_acento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    limpo = re.sub(r"[^a-zA-Z0-9]+", "_", sem_acento).strip("_").lower()
+    return limpo[:40]
 
 
 def _gerar_pdf_bytes(orcamento: models.Orcamento) -> bytes:
@@ -47,12 +60,19 @@ def _gerar_pdf_bytes(orcamento: models.Orcamento) -> bytes:
 
     # Cabeçalho
     cliente = orcamento.cliente
-    header_data = [
-        [Paragraph("ORÇAMENTO TÉCNICO COMERCIAL", ParagraphStyle(
-            "title", parent=styles["Title"], fontSize=15, textColor=INK, alignment=0
-        ))],
-    ]
-    story.append(Table(header_data, colWidths=[170 * mm]))
+    titulo_style = ParagraphStyle("title", parent=styles["Title"], fontSize=15, textColor=INK, alignment=0)
+
+    if os.path.exists(LOGO_PATH):
+        logo = Image(LOGO_PATH, width=20 * mm, height=20 * mm)
+        header_data = [[logo, Paragraph("ORÇAMENTO TÉCNICO COMERCIAL", titulo_style)]]
+        header_table = Table(header_data, colWidths=[24 * mm, 146 * mm])
+        header_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (0, 0), 0),
+        ]))
+        story.append(header_table)
+    else:
+        story.append(Table([[Paragraph("ORÇAMENTO TÉCNICO COMERCIAL", titulo_style)]], colWidths=[170 * mm]))
     story.append(Spacer(1, 2))
 
     numero_txt = f"Proposta nº {orcamento.numero}" if orcamento.numero else f"Proposta nº {orcamento.id}"
@@ -179,7 +199,8 @@ def gerar_pdf_orcamento(orcamento_id: int, db: Session = Depends(get_db)):
 
     pdf_bytes = _gerar_pdf_bytes(orcamento)
     numero = orcamento.numero or orcamento.id
-    filename = f"orcamento_{numero}.pdf"
+    cliente_slug = _slugify(orcamento.cliente.nome)
+    filename = f"orcamento_{numero}_{cliente_slug}.pdf"
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

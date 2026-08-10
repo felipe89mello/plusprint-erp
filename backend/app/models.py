@@ -81,6 +81,7 @@ class Orcamento(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(String(20), nullable=True)  # nº da proposta comercial (ex: "084")
+    tipo = Column(String(30), default="tecnico")  # tecnico (manutenção) | venda_equipamento
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     local_equipamento = Column(String(150), nullable=True)  # ex: "Loja Mooca"
 
@@ -100,6 +101,7 @@ class Orcamento(Base):
     itens_equipamento = relationship("OrcamentoEquipamento", back_populates="orcamento", cascade="all, delete-orphan")
     ordens_servico = relationship("OrdemServico", back_populates="orcamento")
     itens = relationship("ItemOrcamento", back_populates="orcamento", cascade="all, delete-orphan")
+    itens_venda = relationship("ItemVendaEquipamento", back_populates="orcamento", cascade="all, delete-orphan")
 
 
 class OrcamentoEquipamento(Base):
@@ -131,6 +133,30 @@ class ItemOrcamento(Base):
     valor_unitario = Column(Numeric(10, 2), nullable=False)
 
     orcamento = relationship("Orcamento", back_populates="itens")
+
+
+class ItemVendaEquipamento(Base):
+    """Uma linha da tabela de itens de um orçamento do tipo 'venda_equipamento'
+    (proposta comercial de equipamento novo) — NCM, part number, garantia,
+    prazo de entrega, IPI/ICMS por item, igual ao modelo comercial usado
+    pela Plusprint para venda de impressoras."""
+
+    __tablename__ = "itens_venda_equipamento"
+
+    id = Column(Integer, primary_key=True, index=True)
+    orcamento_id = Column(Integer, ForeignKey("orcamentos.id"), nullable=False)
+    ncm = Column(String(20), nullable=True)
+    partnumber = Column(String(100), nullable=True)
+    descricao = Column(String(250), nullable=False)
+    quantidade = Column(Numeric(10, 2), nullable=False, default=1)
+    unidade = Column(String(20), default="Peça")
+    garantia_meses = Column(Integer, nullable=True)
+    prazo_entrega = Column(String(100), nullable=True)  # ex: "30 Dias"
+    ipi_percentual = Column(Numeric(5, 2), nullable=True)
+    icms_percentual = Column(Numeric(5, 2), nullable=True)
+    preco_unitario = Column(Numeric(10, 2), nullable=False)
+
+    orcamento = relationship("Orcamento", back_populates="itens_venda")
 
 
 class Contrato(Base):

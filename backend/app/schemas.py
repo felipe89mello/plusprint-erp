@@ -165,8 +165,45 @@ class OrcamentoEquipamentoOut(OrcamentoEquipamentoItem):
     id: int
 
 
+class ItemVendaEquipamentoCreate(BaseModel):
+    ncm: Optional[str] = None
+    partnumber: Optional[str] = None
+    descricao: str
+    quantidade: Decimal = Decimal("1")
+    unidade: str = "Peça"
+    garantia_meses: Optional[int] = None
+    prazo_entrega: Optional[str] = None
+    ipi_percentual: Optional[Decimal] = None
+    icms_percentual: Optional[Decimal] = None
+    preco_unitario: Decimal
+
+
+class ItemVendaEquipamentoOut(ItemVendaEquipamentoCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    valor_total: Decimal = Decimal("0")
+
+    @classmethod
+    def from_model(cls, item):
+        return cls(
+            id=item.id,
+            ncm=item.ncm,
+            partnumber=item.partnumber,
+            descricao=item.descricao,
+            quantidade=item.quantidade,
+            unidade=item.unidade,
+            garantia_meses=item.garantia_meses,
+            prazo_entrega=item.prazo_entrega,
+            ipi_percentual=item.ipi_percentual,
+            icms_percentual=item.icms_percentual,
+            preco_unitario=item.preco_unitario,
+            valor_total=item.quantidade * item.preco_unitario,
+        )
+
+
 class OrcamentoBase(BaseModel):
     numero: Optional[str] = None
+    tipo: str = "tecnico"  # tecnico (manutenção) | venda_equipamento
     cliente_id: int
     local_equipamento: Optional[str] = None
     observacoes: Optional[str] = None
@@ -182,11 +219,13 @@ class OrcamentoBase(BaseModel):
 class OrcamentoCreate(OrcamentoBase):
     itens: list[ItemOrcamentoCreate] = []
     equipamentos: list[OrcamentoEquipamentoItem] = []
+    itens_venda: list[ItemVendaEquipamentoCreate] = []
     data: Optional[datetime] = None  # se não informado, usa a data/hora atual (emissão)
 
 
 class OrcamentoUpdate(BaseModel):
     numero: Optional[str] = None
+    tipo: Optional[str] = None
     local_equipamento: Optional[str] = None
     observacoes: Optional[str] = None
     validade_dias: Optional[int] = None
@@ -198,6 +237,7 @@ class OrcamentoUpdate(BaseModel):
     status: Optional[str] = None
     itens: Optional[list[ItemOrcamentoCreate]] = None
     equipamentos: Optional[list[OrcamentoEquipamentoItem]] = None
+    itens_venda: Optional[list[ItemVendaEquipamentoCreate]] = None
     data: Optional[datetime] = None
 
 
@@ -206,6 +246,7 @@ class OrcamentoOut(OrcamentoBase):
     id: int
     data: datetime
     itens: list[ItemOrcamentoOut] = []
+    itens_venda: list[ItemVendaEquipamentoOut] = []
     valor_total: Decimal = Decimal("0")
     equipamentos: list[OrcamentoEquipamentoOut] = []
 
@@ -214,8 +255,12 @@ class OrcamentoOut(OrcamentoBase):
         data = {c: getattr(orcamento, c) for c in OrcamentoBase.model_fields}
         data["id"] = orcamento.id
         data["data"] = orcamento.data
+        data["tipo"] = data.get("tipo") or "tecnico"  # registros antigos (antes do campo existir) ficam com NULL
         data["itens"] = [ItemOrcamentoOut.from_model(i) for i in orcamento.itens]
-        data["valor_total"] = sum((i.quantidade * i.valor_unitario for i in orcamento.itens), Decimal("0"))
+        data["itens_venda"] = [ItemVendaEquipamentoOut.from_model(i) for i in orcamento.itens_venda]
+        valor_servicos = sum((i.quantidade * i.valor_unitario for i in orcamento.itens), Decimal("0"))
+        valor_venda = sum((i.quantidade * i.preco_unitario for i in orcamento.itens_venda), Decimal("0"))
+        data["valor_total"] = valor_servicos + valor_venda
         data["equipamentos"] = [OrcamentoEquipamentoOut.model_validate(v) for v in orcamento.itens_equipamento]
         return cls(**data)
 

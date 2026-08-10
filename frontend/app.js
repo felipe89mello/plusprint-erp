@@ -75,6 +75,7 @@ const ENTITIES = {
       { key: "id", label: "ID", mono: true },
       { key: "numero", label: "Nº" },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
+      { key: "tipo", label: "Tipo", tipoOrcamento: true },
       { key: "data", label: "Emissão", date: true },
       { key: "valor_total", label: "Valor", money: true },
       { key: "status", label: "Status", badge: true },
@@ -201,6 +202,11 @@ function formatMoney(v) {
 function formatDate(v) {
   if (!v) return "—";
   return new Date(v).toLocaleDateString("pt-BR");
+}
+
+const TIPO_ORCAMENTO_LABEL = { tecnico: "Técnico / Manutenção", venda_equipamento: "Venda de Equipamento" };
+function formatTipoOrcamento(v) {
+  return TIPO_ORCAMENTO_LABEL[v] || TIPO_ORCAMENTO_LABEL.tecnico;
 }
 
 function labelForItem(item) {
@@ -389,6 +395,7 @@ async function renderList(viewKey) {
             if (c.relation) value = relationLabel(c.relation, value);
             else if (c.money) value = formatMoney(value);
             else if (c.date) value = formatDate(value);
+            else if (c.tipoOrcamento) value = formatTipoOrcamento(value);
             else if (c.badge) return `<td><span class="badge status-${value}">${value}</span></td>`;
             else if (value == null || value === "") value = "—";
 
@@ -600,9 +607,9 @@ function itemRowHtml(item = {}) {
   const id = `item-${itemRowCount}`;
   return `
     <tr data-item-row="${id}">
-      <td><input type="number" step="0.01" class="item-qtd" value="${item.quantidade ?? ""}" placeholder="Qtde." required></td>
-      <td><input type="text" class="item-desc" value="${item.descricao ?? ""}" placeholder="Descrição" required></td>
-      <td><input type="number" step="0.01" class="item-valor" value="${item.valor_unitario ?? ""}" placeholder="Unitário" required></td>
+      <td><input type="number" step="0.01" class="item-qtd" value="${item.quantidade ?? ""}" placeholder="Qtde."></td>
+      <td><input type="text" class="item-desc" value="${item.descricao ?? ""}" placeholder="Descrição"></td>
+      <td><input type="number" step="0.01" class="item-valor" value="${item.valor_unitario ?? ""}" placeholder="Unitário"></td>
       <td class="item-total mono">R$ 0,00</td>
       <td><button type="button" class="btn btn-danger" data-remove-row="${id}">×</button></td>
     </tr>
@@ -645,6 +652,8 @@ async function openOrcamentoModal(existingItem) {
     .map((c) => `<option value="${c.id}" ${isEdit && c.id === existingItem.cliente_id ? "selected" : ""}>${c.nome}</option>`)
     .join("");
 
+  const tipoAtual = isEdit ? existingItem.tipo || "tecnico" : "tecnico";
+
   // Cada equipamento adicionado carrega seu próprio diagnóstico/solução —
   // controlado em memória enquanto o formulário está aberto, e lido do DOM
   // (cada card tem suas próprias textareas) só no momento de salvar.
@@ -661,6 +670,11 @@ async function openOrcamentoModal(existingItem) {
       .filter((e) => !equipamentosSelecionados.some((s) => s.equipamento_id === e.id))
       .map((e) => `<option value="${e.id}">${labelForItem(e)}</option>`)
       .join("");
+
+  // Itens de venda de equipamento novo (NCM, Part Number, garantia, IPI/ICMS etc.)
+  let itensVenda = isEdit && existingItem.itens_venda && existingItem.itens_venda.length
+    ? existingItem.itens_venda.map((i) => ({ ...i }))
+    : [];
 
   const v = (campo, def = "") => (isEdit && existingItem[campo] != null ? existingItem[campo] : def);
   const itensExistentes = isEdit && existingItem.itens.length ? existingItem.itens : [{}];
@@ -679,24 +693,40 @@ async function openOrcamentoModal(existingItem) {
     </div>
 
     <div class="field-row">
+      <div class="field"><label>Tipo de orçamento</label>
+        <select name="tipo" id="orcamento-tipo">
+          <option value="tecnico" ${tipoAtual === "tecnico" ? "selected" : ""}>Técnico / Manutenção</option>
+          <option value="venda_equipamento" ${tipoAtual === "venda_equipamento" ? "selected" : ""}>Venda de Equipamento</option>
+        </select>
+      </div>
       <div class="field"><label>Data de emissão</label><input type="date" name="data" value="${v("data").slice(0, 10)}" placeholder="hoje"></div>
+    </div>
+
+    <div id="secao-tecnico">
       <div class="field"><label>Local</label><input type="text" name="local_equipamento" value="${v("local_equipamento")}" placeholder="ex: Loja Mooca"></div>
+
+      <label class="field-label-block">Equipamentos — defeito e solução de cada um</label>
+      <div class="picker-row">
+        <select id="equipamento-picker">${equipamentosPickerOptions()}</select>
+        <button type="button" class="btn" id="btn-add-equip">+ Adicionar</button>
+      </div>
+      <div id="equipamentos-cards"></div>
+
+      <label class="field-label-block">Peças e Serviços</label>
+      <table class="items-table">
+        <thead><tr><th>Qtde./Hrs</th><th>Descrição</th><th>Unitário (R$)</th><th>Total</th><th></th></tr></thead>
+        <tbody id="itens-body">${itensExistentes.map(itemRowHtml).join("")}</tbody>
+      </table>
+      <button type="button" class="btn" id="btn-add-item">+ Adicionar item</button>
+      <div class="subtotal-row">Subtotal: <strong id="subtotal-display">R$ 0,00</strong></div>
     </div>
 
-    <label class="field-label-block">Equipamentos — defeito e solução de cada um</label>
-    <div class="picker-row">
-      <select id="equipamento-picker">${equipamentosPickerOptions()}</select>
-      <button type="button" class="btn" id="btn-add-equip">+ Adicionar</button>
+    <div id="secao-venda" class="hidden">
+      <label class="field-label-block">Itens — Equipamento(s) Novo(s)</label>
+      <div id="venda-cards"></div>
+      <button type="button" class="btn" id="btn-add-venda-item">+ Adicionar item</button>
+      <div class="subtotal-row">Total: <strong id="venda-subtotal-display">R$ 0,00</strong></div>
     </div>
-    <div id="equipamentos-cards"></div>
-
-    <label class="field-label-block">Peças e Serviços</label>
-    <table class="items-table">
-      <thead><tr><th>Qtde./Hrs</th><th>Descrição</th><th>Unitário (R$)</th><th>Total</th><th></th></tr></thead>
-      <tbody id="itens-body">${itensExistentes.map(itemRowHtml).join("")}</tbody>
-    </table>
-    <button type="button" class="btn" id="btn-add-item">+ Adicionar item</button>
-    <div class="subtotal-row">Subtotal: <strong id="subtotal-display">R$ 0,00</strong></div>
 
     <div class="field-row">
       <div class="field"><label>Validade (dias)</label><input type="number" name="validade_dias" value="${v("validade_dias", 5)}"></div>
@@ -708,7 +738,7 @@ async function openOrcamentoModal(existingItem) {
     </div>
     <div class="field-row">
       <div class="field"><label>Transporte por conta de</label><input type="text" name="responsabilidade_transporte" value="${v("responsabilidade_transporte", "Cliente")}"></div>
-      <div class="field"><label>Técnico responsável</label><input type="text" name="tecnico_responsavel" value="${v("tecnico_responsavel")}"></div>
+      <div class="field"><label>Técnico / Vendedor responsável</label><input type="text" name="tecnico_responsavel" value="${v("tecnico_responsavel")}"></div>
     </div>
 
     <div class="field"><label>Observações</label><textarea name="observacoes">${v("observacoes")}</textarea></div>
@@ -732,6 +762,14 @@ async function openOrcamentoModal(existingItem) {
     attachItemListeners(form);
     recalcularSubtotal(form);
   });
+
+  function toggleSecaoPorTipo() {
+    const tipo = document.getElementById("orcamento-tipo").value;
+    document.getElementById("secao-tecnico").classList.toggle("hidden", tipo !== "tecnico");
+    document.getElementById("secao-venda").classList.toggle("hidden", tipo !== "venda_equipamento");
+  }
+  document.getElementById("orcamento-tipo").addEventListener("change", toggleSecaoPorTipo);
+  toggleSecaoPorTipo();
 
   function syncEquipCardsFromDom() {
     document.querySelectorAll("[data-equip-card]").forEach((card) => {
@@ -787,6 +825,90 @@ async function openOrcamentoModal(existingItem) {
 
   renderEquipCards();
 
+  // ---------- Itens de venda de equipamento novo ----------
+
+  function recalcularSubtotalVenda() {
+    let total = 0;
+    document.querySelectorAll("[data-venda-item]").forEach((card) => {
+      const qtd = parseFloat(card.querySelector('[data-field="quantidade"]').value) || 0;
+      const preco = parseFloat(card.querySelector('[data-field="preco_unitario"]').value) || 0;
+      total += qtd * preco;
+    });
+    document.getElementById("venda-subtotal-display").textContent = formatMoney(total);
+  }
+
+  function syncVendaCardsFromDom() {
+    document.querySelectorAll("[data-venda-item]").forEach((card) => {
+      const idx = Number(card.dataset.vendaItem);
+      const item = itensVenda[idx];
+      if (!item) return;
+      item.ncm = card.querySelector('[data-field="ncm"]').value;
+      item.partnumber = card.querySelector('[data-field="partnumber"]').value;
+      item.descricao = card.querySelector('[data-field="descricao"]').value;
+      item.quantidade = card.querySelector('[data-field="quantidade"]').value;
+      item.unidade = card.querySelector('[data-field="unidade"]').value;
+      item.garantia_meses = card.querySelector('[data-field="garantia_meses"]').value;
+      item.prazo_entrega = card.querySelector('[data-field="prazo_entrega"]').value;
+      item.ipi_percentual = card.querySelector('[data-field="ipi_percentual"]').value;
+      item.icms_percentual = card.querySelector('[data-field="icms_percentual"]').value;
+      item.preco_unitario = card.querySelector('[data-field="preco_unitario"]').value;
+    });
+  }
+
+  function renderVendaCards() {
+    const wrap = document.getElementById("venda-cards");
+    wrap.innerHTML = itensVenda.length
+      ? itensVenda
+          .map(
+            (item, idx) => `<div class="equip-card" data-venda-item="${idx}">
+              <div class="equip-card-header">
+                <strong>Item ${idx + 1}</strong>
+                <button type="button" data-remove-venda-item="${idx}">Remover</button>
+              </div>
+              <div class="field-row">
+                <div class="field"><label>NCM</label><input data-field="ncm" value="${item.ncm ?? ""}"></div>
+                <div class="field"><label>Part Number</label><input data-field="partnumber" value="${item.partnumber ?? ""}"></div>
+              </div>
+              <div class="field"><label>Descrição do item *</label><input data-field="descricao" value="${item.descricao ?? ""}"></div>
+              <div class="field-row">
+                <div class="field"><label>Quantidade</label><input type="number" step="0.01" data-field="quantidade" value="${item.quantidade ?? 1}"></div>
+                <div class="field"><label>Unidade</label><input data-field="unidade" value="${item.unidade ?? "Peça"}"></div>
+              </div>
+              <div class="field-row">
+                <div class="field"><label>Garantia (meses)</label><input type="number" data-field="garantia_meses" value="${item.garantia_meses ?? ""}"></div>
+                <div class="field"><label>Prazo de entrega</label><input data-field="prazo_entrega" value="${item.prazo_entrega ?? ""}" placeholder="ex: 30 Dias"></div>
+              </div>
+              <div class="field-row">
+                <div class="field"><label>IPI (%)</label><input type="number" step="0.01" data-field="ipi_percentual" value="${item.ipi_percentual ?? ""}"></div>
+                <div class="field"><label>ICMS (%)</label><input type="number" step="0.01" data-field="icms_percentual" value="${item.icms_percentual ?? ""}"></div>
+              </div>
+              <div class="field"><label>Preço Unitário (R$) *</label><input type="number" step="0.01" data-field="preco_unitario" value="${item.preco_unitario ?? ""}"></div>
+            </div>`
+          )
+          .join("")
+      : `<div class="chips-empty">Nenhum item adicionado ainda.</div>`;
+
+    wrap.querySelectorAll("[data-remove-venda-item]").forEach((btn) => {
+      btn.onclick = () => {
+        syncVendaCardsFromDom();
+        itensVenda.splice(Number(btn.dataset.removeVendaItem), 1);
+        renderVendaCards();
+      };
+    });
+    wrap.querySelectorAll("[data-venda-item] input").forEach((input) => {
+      input.oninput = recalcularSubtotalVenda;
+    });
+    recalcularSubtotalVenda();
+  }
+
+  document.getElementById("btn-add-venda-item").addEventListener("click", () => {
+    syncVendaCardsFromDom();
+    itensVenda.push({ unidade: "Peça", quantidade: 1 });
+    renderVendaCards();
+  });
+
+  renderVendaCards();
+
   attachItemListeners(form);
   recalcularSubtotal(form);
 
@@ -817,8 +939,28 @@ async function openOrcamentoModal(existingItem) {
       }
     });
 
-    if (data.itens.length === 0) {
+    syncVendaCardsFromDom();
+    data.itens_venda = itensVenda
+      .filter((i) => i.descricao && i.preco_unitario !== "" && i.preco_unitario != null)
+      .map((i) => ({
+        ncm: i.ncm || null,
+        partnumber: i.partnumber || null,
+        descricao: i.descricao,
+        quantidade: parseFloat(i.quantidade) || 1,
+        unidade: i.unidade || "Peça",
+        garantia_meses: i.garantia_meses !== "" && i.garantia_meses != null ? parseInt(i.garantia_meses) : null,
+        prazo_entrega: i.prazo_entrega || null,
+        ipi_percentual: i.ipi_percentual !== "" && i.ipi_percentual != null ? parseFloat(i.ipi_percentual) : null,
+        icms_percentual: i.icms_percentual !== "" && i.icms_percentual != null ? parseFloat(i.icms_percentual) : null,
+        preco_unitario: parseFloat(i.preco_unitario),
+      }));
+
+    if (data.tipo === "tecnico" && data.itens.length === 0) {
       showAlert("Adicione ao menos um item de peça ou serviço.");
+      return;
+    }
+    if (data.tipo === "venda_equipamento" && data.itens_venda.length === 0) {
+      showAlert("Adicione ao menos um item de equipamento.");
       return;
     }
 

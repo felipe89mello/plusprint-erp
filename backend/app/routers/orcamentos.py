@@ -19,6 +19,25 @@ def _substituir_itens(db: Session, orcamento: models.Orcamento, itens: list[sche
         )
 
 
+def _substituir_itens_venda(orcamento: models.Orcamento, itens: list[schemas.ItemVendaEquipamentoCreate]):
+    orcamento.itens_venda.clear()
+    for item in itens:
+        orcamento.itens_venda.append(
+            models.ItemVendaEquipamento(
+                ncm=item.ncm,
+                partnumber=item.partnumber,
+                descricao=item.descricao,
+                quantidade=item.quantidade,
+                unidade=item.unidade,
+                garantia_meses=item.garantia_meses,
+                prazo_entrega=item.prazo_entrega,
+                ipi_percentual=item.ipi_percentual,
+                icms_percentual=item.icms_percentual,
+                preco_unitario=item.preco_unitario,
+            )
+        )
+
+
 def _substituir_equipamentos(
     db: Session, orcamento: models.Orcamento, equipamentos: list[schemas.OrcamentoEquipamentoItem]
 ):
@@ -46,15 +65,14 @@ def criar_orcamento(orcamento: schemas.OrcamentoCreate, db: Session = Depends(ge
     if not db.get(models.Cliente, orcamento.cliente_id):
         raise HTTPException(status_code=400, detail="Cliente informado não existe")
 
-    dados = orcamento.model_dump(exclude={"itens", "equipamentos"})
-    if dados.get("data") is None:
-        dados.pop("data", None)  # deixa o default do model (agora) valer
+    dados = orcamento.model_dump(exclude={"itens", "equipamentos", "itens_venda"})
     novo = models.Orcamento(**dados)
     novo.itens = [
         models.ItemOrcamento(quantidade=i.quantidade, descricao=i.descricao, valor_unitario=i.valor_unitario)
         for i in orcamento.itens
     ]
     _substituir_equipamentos(db, novo, orcamento.equipamentos)
+    _substituir_itens_venda(novo, orcamento.itens_venda)
 
     db.add(novo)
     db.commit()
@@ -66,6 +84,7 @@ def criar_orcamento(orcamento: schemas.OrcamentoCreate, db: Session = Depends(ge
 def listar_orcamentos(
     cliente_id: int | None = None,
     status: str | None = None,
+    tipo: str | None = None,
     db: Session = Depends(get_db),
 ):
     query = db.query(models.Orcamento)
@@ -73,6 +92,8 @@ def listar_orcamentos(
         query = query.filter(models.Orcamento.cliente_id == cliente_id)
     if status is not None:
         query = query.filter(models.Orcamento.status == status)
+    if tipo is not None:
+        query = query.filter(models.Orcamento.tipo == tipo)
     return [schemas.OrcamentoOut.from_model(o) for o in query.all()]
 
 
@@ -90,7 +111,7 @@ def atualizar_orcamento(orcamento_id: int, dados: schemas.OrcamentoUpdate, db: S
     if not orcamento:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
 
-    campos = dados.model_dump(exclude_unset=True, exclude={"itens", "equipamentos"})
+    campos = dados.model_dump(exclude_unset=True, exclude={"itens", "equipamentos", "itens_venda"})
     for campo, valor in campos.items():
         setattr(orcamento, campo, valor)
 
@@ -99,6 +120,9 @@ def atualizar_orcamento(orcamento_id: int, dados: schemas.OrcamentoUpdate, db: S
 
     if dados.equipamentos is not None:
         _substituir_equipamentos(db, orcamento, dados.equipamentos)
+
+    if dados.itens_venda is not None:
+        _substituir_itens_venda(orcamento, dados.itens_venda)
 
     db.commit()
     db.refresh(orcamento)

@@ -145,6 +145,7 @@ class Peca(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(150), nullable=False)
+    partnumber = Column(String(100), nullable=True)
     quantidade_estoque = Column(Integer, nullable=False, default=0)
     valor_unitario = Column(Numeric(10, 2), nullable=False)  # preço de venda
     valor_compra = Column(Numeric(10, 2), nullable=True)  # quanto você pagou (custo)

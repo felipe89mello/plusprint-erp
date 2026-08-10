@@ -49,6 +49,7 @@ const ENTITIES = {
   ordens: {
     title: "Ordens de Serviço",
     endpoint: "/ordens-servico/",
+    custom: true, // este módulo usa formulário próprio (openOrdemModal) — inclui peças utilizadas
     columns: [
       { key: "id", label: "ID", mono: true },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
@@ -108,12 +109,14 @@ const ENTITIES = {
     columns: [
       { key: "id", label: "ID", mono: true },
       { key: "nome", label: "Nome" },
+      { key: "partnumber", label: "Partnumber", mono: true },
       { key: "quantidade_estoque", label: "Estoque", mono: true, lowStock: true },
       { key: "valor_compra", label: "Custo (compra)", money: true },
       { key: "valor_unitario", label: "Valor de venda", money: true },
     ],
     fields: [
       { name: "nome", label: "Nome", type: "text", required: true },
+      { name: "partnumber", label: "Partnumber", type: "text" },
       { name: "quantidade_estoque", label: "Quantidade em estoque", type: "number", required: true },
       { name: "valor_compra", label: "Valor de compra / custo (R$)", type: "number" },
       { name: "valor_unitario", label: "Valor de venda (R$)", type: "number", required: true },
@@ -431,7 +434,8 @@ async function renderList(viewKey) {
     root.querySelectorAll("[data-edit]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const item = items.find((i) => String(i.id) === btn.dataset.edit);
-        if (ENTITIES[viewKey].custom) openOrcamentoModal(item);
+        if (viewKey === "orcamentos") openOrcamentoModal(item);
+        else if (viewKey === "ordens") openOrdemModal(item);
         else openModal(viewKey, item);
       });
     });
@@ -470,7 +474,7 @@ async function handleGerarOS(orcamento) {
     descricao: montarDescricaoOS(orcamento),
     status: "aberto",
   };
-  await openModal("ordens", null, prefill);
+  await openOrdemModal(null, prefill);
 }
 
 async function handleDelete(viewKey, id) {
@@ -824,6 +828,197 @@ async function openOrcamentoModal(existingItem) {
 }
 
 // ---------------------------------------------------------------
+// Formulário customizado de Ordem de Serviço (peças utilizadas)
+// ---------------------------------------------------------------
+
+async function openOrdemModal(existingItem, prefillData = null) {
+  const config = ENTITIES.ordens;
+  await preloadRelations(config);
+  if (!cache.pecas) cache.pecas = await apiGet(ENTITIES.pecas.endpoint);
+
+  const isEdit = existingItem != null;
+  document.getElementById("modal-title").textContent = `${isEdit ? "Editar" : "Novo"} — Ordem de Serviço`;
+  document.getElementById("modal").classList.add("modal-lg");
+
+  const v = (campo, def = "") => {
+    if (isEdit && existingItem[campo] != null) return existingItem[campo];
+    if (!isEdit && prefillData && prefillData[campo] != null) return prefillData[campo];
+    return def;
+  };
+
+  const clientesOptions = (cache.clientes || [])
+    .map((c) => `<option value="${c.id}" ${String(c.id) === String(v("cliente_id")) ? "selected" : ""}>${c.nome}</option>`)
+    .join("");
+  const equipamentosOptions = (cache.equipamentos || [])
+    .map((e) => `<option value="${e.id}" ${String(e.id) === String(v("equipamento_id")) ? "selected" : ""}>${labelForItem(e)}</option>`)
+    .join("");
+  const orcamentosOptions = (cache.orcamentos || [])
+    .map((o) => `<option value="${o.id}" ${String(o.id) === String(v("orcamento_id")) ? "selected" : ""}>${labelForItem(o)}</option>`)
+    .join("");
+
+  // Peças que serão registradas ao salvar (novas — ainda não descontadas do estoque)
+  let pecasNovas = [];
+
+  const pecasPickerOptions = () =>
+    (cache.pecas || [])
+      .map((p) => `<option value="${p.id}">${p.nome}${p.partnumber ? " — " + p.partnumber : ""} (estoque: ${p.quantidade_estoque})</option>`)
+      .join("");
+
+  const dataAberturaValor = isEdit && existingItem.data_abertura ? existingItem.data_abertura.slice(0, 10) : "";
+
+  const form = document.getElementById("modal-form");
+  form.setAttribute("autocomplete", "off");
+  form.innerHTML = `
+    <div class="field-row">
+      <div class="field"><label>Cliente *</label>
+        <select name="cliente_id" required>
+          <option value="">Selecione...</option>
+          ${clientesOptions}
+        </select>
+      </div>
+      <div class="field"><label>Equipamento</label>
+        <select name="equipamento_id"><option value="">— nenhum —</option>${equipamentosOptions}</select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field"><label>Orçamento de origem (opcional)</label>
+        <select name="orcamento_id"><option value="">— nenhum —</option>${orcamentosOptions}</select>
+      </div>
+      <div class="field"><label>Data de abertura</label><input type="date" name="data_abertura" value="${dataAberturaValor}" placeholder="hoje"></div>
+    </div>
+
+    <div class="field"><label>Descrição *</label><textarea name="descricao" required>${v("descricao")}</textarea></div>
+
+    <div class="field"><label>Status</label>
+      <select name="status">
+        ${["aberto", "em_andamento", "concluido"].map((s) => `<option value="${s}" ${v("status", "aberto") === s ? "selected" : ""}>${s}</option>`).join("")}
+      </select>
+    </div>
+
+    <label class="field-label-block">Peças utilizadas</label>
+    <div id="pecas-ja-registradas"></div>
+    <div class="picker-row">
+      <select id="peca-picker">${pecasPickerOptions()}</select>
+      <input type="number" id="peca-qtd" min="1" step="1" value="1" style="width:80px">
+      <button type="button" class="btn" id="btn-add-peca">+ Adicionar</button>
+    </div>
+    <div id="pecas-novas-list"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn" id="modal-cancel">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Salvar</button>
+    </div>
+  `;
+
+  document.getElementById("modal-overlay").classList.remove("hidden");
+  document.getElementById("modal-cancel").addEventListener("click", closeModal);
+
+  // Se estiver editando, mostra o que já foi registrado nessa OS (histórico —
+  // já descontou estoque, não é editável por aqui).
+  if (isEdit) {
+    const registradas = document.getElementById("pecas-ja-registradas");
+    registradas.innerHTML = `<div class="empty-state" style="padding:12px">Carregando peças já registradas...</div>`;
+    try {
+      const usos = await apiGet(`/pecas/usos/por-os/${existingItem.id}`);
+      if (usos.length === 0) {
+        registradas.innerHTML = "";
+      } else {
+        registradas.innerHTML = `<div class="equip-card" style="background:#F0F0EC">
+          <div style="font-size:12px;color:var(--ink-soft);margin-bottom:6px">Já registradas nesta OS (histórico):</div>
+          ${usos
+            .map((u) => {
+              const peca = (cache.pecas || []).find((p) => p.id === u.peca_id);
+              return `<div class="mono" style="font-size:12.5px;padding:2px 0">${u.quantidade_usada}x ${peca ? peca.nome : "#" + u.peca_id}</div>`;
+            })
+            .join("")}
+        </div>`;
+      }
+    } catch {
+      registradas.innerHTML = "";
+    }
+  }
+
+  function renderPecasNovas() {
+    const wrap = document.getElementById("pecas-novas-list");
+    wrap.innerHTML = pecasNovas.length
+      ? pecasNovas
+          .map(
+            (p, idx) =>
+              `<span class="chip">${p.quantidade}x ${p.nome}<button type="button" data-remove-peca-nova="${idx}">×</button></span>`
+          )
+          .join("")
+      : "";
+    wrap.querySelectorAll("[data-remove-peca-nova]").forEach((btn) => {
+      btn.onclick = () => {
+        pecasNovas.splice(Number(btn.dataset.removePecaNova), 1);
+        renderPecasNovas();
+      };
+    });
+  }
+
+  document.getElementById("btn-add-peca").addEventListener("click", () => {
+    const picker = document.getElementById("peca-picker");
+    const qtdInput = document.getElementById("peca-qtd");
+    if (!picker.value) return;
+    const qtd = Number(qtdInput.value) || 1;
+    const peca = (cache.pecas || []).find((p) => p.id === Number(picker.value));
+    if (!peca) return;
+    pecasNovas.push({ peca_id: peca.id, nome: peca.nome, quantidade: qtd });
+    qtdInput.value = 1;
+    renderPecasNovas();
+  });
+
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(form);
+    const data = Object.fromEntries(fd.entries());
+
+    ["cliente_id", "equipamento_id", "orcamento_id"].forEach((k) => {
+      if (data[k] === "") delete data[k];
+      else data[k] = Number(data[k]);
+    });
+    if (data.data_abertura === "") delete data.data_abertura;
+
+    try {
+      let osId;
+      if (isEdit) {
+        await apiSend(`${config.endpoint}${existingItem.id}`, "PUT", data);
+        osId = existingItem.id;
+      } else {
+        const criada = await apiSend(config.endpoint, "POST", data);
+        osId = criada.id;
+      }
+
+      // Registra as peças novas uma a uma — cada chamada já desconta o
+      // estoque e "congela" preço/custo, igual ao fluxo de Peças/Estoque.
+      const erros = [];
+      for (const p of pecasNovas) {
+        try {
+          await apiSend("/pecas/usar-em-os", "POST", {
+            ordem_servico_id: osId,
+            peca_id: p.peca_id,
+            quantidade_usada: p.quantidade,
+          });
+        } catch (e) {
+          erros.push(`${p.nome}: ${e.message}`);
+        }
+      }
+
+      if (erros.length) {
+        showAlert(`OS salva, mas houve erro ao registrar peça(s): ${erros.join(" | ")}`);
+      } else {
+        showAlert(isEdit ? "OS atualizada com sucesso." : "OS criada com sucesso.", "success");
+      }
+      closeModal();
+      switchView("ordens");
+    } catch (e) {
+      showAlert(e.message);
+    }
+  };
+}
+
+// ---------------------------------------------------------------
 // Navegação entre módulos
 // ---------------------------------------------------------------
 
@@ -854,7 +1049,8 @@ document.getElementById("nav").addEventListener("click", (ev) => {
 });
 
 document.getElementById("btn-novo").addEventListener("click", () => {
-  if (ENTITIES[currentView] && ENTITIES[currentView].custom) openOrcamentoModal(null);
+  if (currentView === "orcamentos") openOrcamentoModal(null);
+  else if (currentView === "ordens") openOrdemModal(null);
   else openModal(currentView);
 });
 document.getElementById("modal-close").addEventListener("click", closeModal);

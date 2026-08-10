@@ -432,6 +432,15 @@ tbody tr:hover { background: #FAFAF8; }
   padding: 9px 14px;
 }
 
+.picker-row input[type="number"] {
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  background: var(--bg);
+}
+
 .chips-wrap {
   display: flex;
   flex-wrap: wrap;

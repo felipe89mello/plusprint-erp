@@ -225,6 +225,7 @@ class ContratoOut(ContratoBase):
 
 class PecaBase(BaseModel):
     nome: str
+    partnumber: Optional[str] = None
     quantidade_estoque: int = 0
     valor_unitario: Decimal
     valor_compra: Optional[Decimal] = None
@@ -236,6 +237,7 @@ class PecaCreate(PecaBase):
 
 class PecaUpdate(BaseModel):
     nome: Optional[str] = None
+    partnumber: Optional[str] = None
     quantidade_estoque: Optional[int] = None
     valor_unitario: Optional[Decimal] = None
     valor_compra: Optional[Decimal] = None

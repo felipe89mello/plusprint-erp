@@ -9,6 +9,18 @@ from app.database import get_db
 router = APIRouter(prefix="/ordens-servico", tags=["Ordens de Serviço"])
 
 
+def _substituir_itens_servico(os_: models.OrdemServico, itens: list[schemas.ItemServicoOSCreate]):
+    os_.itens_servico.clear()
+    for item in itens:
+        os_.itens_servico.append(
+            models.ItemServicoOS(
+                descricao=item.descricao,
+                quantidade=item.quantidade,
+                valor_unitario=item.valor_unitario,
+            )
+        )
+
+
 @router.post("/", response_model=schemas.OrdemServicoOut, status_code=201)
 def criar_ordem_servico(os_: schemas.OrdemServicoCreate, db: Session = Depends(get_db)):
     if not db.get(models.Cliente, os_.cliente_id):
@@ -17,14 +29,21 @@ def criar_ordem_servico(os_: schemas.OrdemServicoCreate, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Equipamento informado não existe")
     if os_.orcamento_id and not db.get(models.Orcamento, os_.orcamento_id):
         raise HTTPException(status_code=400, detail="Orçamento informado não existe")
-    dados = os_.model_dump()
+
+    dados = os_.model_dump(exclude={"itens_servico"})
     if dados.get("data_abertura") is None:
         dados.pop("data_abertura", None)  # deixa o default do model (agora) valer
+
     nova = models.OrdemServico(**dados)
+    nova.itens_servico = [
+        models.ItemServicoOS(descricao=i.descricao, quantidade=i.quantidade, valor_unitario=i.valor_unitario)
+        for i in os_.itens_servico
+    ]
+
     db.add(nova)
     db.commit()
     db.refresh(nova)
-    return nova
+    return schemas.OrdemServicoOut.from_model(nova)
 
 
 @router.get("/", response_model=list[schemas.OrdemServicoOut])
@@ -38,7 +57,7 @@ def listar_ordens_servico(
         query = query.filter(models.OrdemServico.cliente_id == cliente_id)
     if status is not None:
         query = query.filter(models.OrdemServico.status == status)
-    return query.all()
+    return [schemas.OrdemServicoOut.from_model(o) for o in query.all()]
 
 
 @router.get("/{os_id}", response_model=schemas.OrdemServicoOut)
@@ -46,7 +65,7 @@ def obter_ordem_servico(os_id: int, db: Session = Depends(get_db)):
     os_ = db.get(models.OrdemServico, os_id)
     if not os_:
         raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
-    return os_
+    return schemas.OrdemServicoOut.from_model(os_)
 
 
 @router.put("/{os_id}", response_model=schemas.OrdemServicoOut)
@@ -54,9 +73,13 @@ def atualizar_ordem_servico(os_id: int, dados: schemas.OrdemServicoUpdate, db: S
     os_ = db.get(models.OrdemServico, os_id)
     if not os_:
         raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
-    campos = dados.model_dump(exclude_unset=True)
+
+    campos = dados.model_dump(exclude_unset=True, exclude={"itens_servico"})
     for campo, valor in campos.items():
         setattr(os_, campo, valor)
+
+    if dados.itens_servico is not None:
+        _substituir_itens_servico(os_, dados.itens_servico)
 
     # Se o status virou "concluído" e nenhuma data de conclusão foi informada
     # nessa mesma atualização, registra a data de hoje automaticamente —
@@ -66,7 +89,7 @@ def atualizar_ordem_servico(os_id: int, dados: schemas.OrdemServicoUpdate, db: S
 
     db.commit()
     db.refresh(os_)
-    return os_
+    return schemas.OrdemServicoOut.from_model(os_)
 
 
 @router.delete("/{os_id}", status_code=204)

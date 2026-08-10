@@ -63,6 +63,28 @@ class EquipamentoOut(EquipamentoBase):
 
 # ---------- Ordem de Serviço ----------
 
+class ItemServicoOSCreate(BaseModel):
+    descricao: str
+    quantidade: Decimal
+    valor_unitario: Decimal
+
+
+class ItemServicoOSOut(ItemServicoOSCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    valor_total: Decimal = Decimal("0")
+
+    @classmethod
+    def from_model(cls, item):
+        return cls(
+            id=item.id,
+            descricao=item.descricao,
+            quantidade=item.quantidade,
+            valor_unitario=item.valor_unitario,
+            valor_total=item.quantidade * item.valor_unitario,
+        )
+
+
 class OrdemServicoBase(BaseModel):
     cliente_id: int
     equipamento_id: Optional[int] = None
@@ -73,6 +95,7 @@ class OrdemServicoBase(BaseModel):
 
 class OrdemServicoCreate(OrdemServicoBase):
     data_abertura: Optional[datetime] = None  # se não informado, usa a data/hora atual
+    itens_servico: list[ItemServicoOSCreate] = []
 
 
 class OrdemServicoUpdate(BaseModel):
@@ -82,6 +105,7 @@ class OrdemServicoUpdate(BaseModel):
     status: Optional[str] = None
     data_abertura: Optional[datetime] = None
     data_conclusao: Optional[datetime] = None
+    itens_servico: Optional[list[ItemServicoOSCreate]] = None
 
 
 class OrdemServicoOut(OrdemServicoBase):
@@ -89,6 +113,18 @@ class OrdemServicoOut(OrdemServicoBase):
     id: int
     data_abertura: datetime
     data_conclusao: Optional[datetime] = None
+    itens_servico: list[ItemServicoOSOut] = []
+    valor_total: Decimal = Decimal("0")
+
+    @classmethod
+    def from_model(cls, os_):
+        data = {c: getattr(os_, c) for c in OrdemServicoBase.model_fields}
+        data["id"] = os_.id
+        data["data_abertura"] = os_.data_abertura
+        data["data_conclusao"] = os_.data_conclusao
+        data["itens_servico"] = [ItemServicoOSOut.from_model(i) for i in os_.itens_servico]
+        data["valor_total"] = sum((i.quantidade * i.valor_unitario for i in os_.itens_servico), Decimal("0"))
+        return cls(**data)
 
 
 # ---------- Orçamento ----------

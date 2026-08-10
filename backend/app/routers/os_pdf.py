@@ -119,6 +119,35 @@ def _gerar_pdf_os_bytes(os_: models.OrdemServico) -> bytes:
         ]))
         story.append(pecas_table)
 
+    if os_.itens_servico:
+        story.append(Paragraph("Serviços / Mão de Obra", section_style))
+        tabela_serv = [["Qtde./Hrs", "Descrição", "Unitário", "Total"]]
+        subtotal_serv = 0
+        for item in os_.itens_servico:
+            total_item = item.quantidade * item.valor_unitario
+            subtotal_serv += total_item
+            tabela_serv.append([
+                f"{item.quantidade:g}",
+                item.descricao,
+                f"R$ {item.valor_unitario:.2f}",
+                f"R$ {total_item:.2f}",
+            ])
+        tabela_serv.append(["", "", "Subtotal", f"R$ {subtotal_serv:.2f}"])
+        serv_table = Table(tabela_serv, colWidths=[22 * mm, 88 * mm, 28 * mm, 32 * mm])
+        serv_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), INK),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("GRID", (0, 0), (-1, -2), 0.5, LINE),
+            ("LINEABOVE", (0, -1), (-1, -1), 1, INK),
+            ("FONTNAME", (2, -1), (-1, -1), "Helvetica-Bold"),
+            ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(serv_table)
+
     tecnico = os_.orcamento.tecnico_responsavel if os_.orcamento else None
     story.append(Spacer(1, 18))
     story.append(Paragraph(f"Técnico Responsável: {tecnico or '—'}", body_style))

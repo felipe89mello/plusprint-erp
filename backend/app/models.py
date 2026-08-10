@@ -64,6 +64,7 @@ class OrdemServico(Base):
     equipamento = relationship("Equipamento", back_populates="ordens_servico")
     orcamento = relationship("Orcamento", back_populates="ordens_servico")
     itens_peca = relationship("ItemPecaOS", back_populates="ordem_servico")
+    itens_servico = relationship("ItemServicoOS", back_populates="ordem_servico", cascade="all, delete-orphan")
 
 
 class Orcamento(Base):
@@ -166,3 +167,19 @@ class ItemPecaOS(Base):
 
     ordem_servico = relationship("OrdemServico", back_populates="itens_peca")
     peca = relationship("Peca", back_populates="itens_os")
+
+
+class ItemServicoOS(Base):
+    """Linha de serviço/mão de obra lançada direto na OS (ex: Hora técnica,
+    Deslocamento) — não vem do estoque de peças, é digitada livremente,
+    igual à tabela 'Peças e Serviços' do Orçamento."""
+
+    __tablename__ = "itens_servico_os"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ordem_servico_id = Column(Integer, ForeignKey("ordens_servico.id"), nullable=False)
+    descricao = Column(String(250), nullable=False)
+    quantidade = Column(Numeric(10, 2), nullable=False)
+    valor_unitario = Column(Numeric(10, 2), nullable=False)
+
+    ordem_servico = relationship("OrdemServico", back_populates="itens_servico")

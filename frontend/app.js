@@ -610,6 +610,19 @@ function recalcularSubtotal(form) {
   form.querySelector("#subtotal-display").textContent = formatMoney(subtotal);
 }
 
+function attachItemListeners(formEl) {
+  formEl.querySelectorAll("[data-remove-row]").forEach((btn) => {
+    btn.onclick = () => {
+      if (formEl.querySelectorAll("[data-item-row]").length <= 1) return; // mantém ao menos 1 linha
+      formEl.querySelector(`[data-item-row="${btn.dataset.removeRow}"]`).remove();
+      recalcularSubtotal(formEl);
+    };
+  });
+  formEl.querySelectorAll(".item-qtd, .item-valor").forEach((input) => {
+    input.oninput = () => recalcularSubtotal(formEl);
+  });
+}
+
 async function openOrcamentoModal(existingItem) {
   await preloadRelations({ columns: [{ relation: "clientes" }, { relation: "equipamentos" }], fields: [] });
 
@@ -763,19 +776,6 @@ async function openOrcamentoModal(existingItem) {
 
   renderEquipCards();
 
-  function attachItemListeners(formEl) {
-    formEl.querySelectorAll("[data-remove-row]").forEach((btn) => {
-      btn.onclick = () => {
-        if (formEl.querySelectorAll("[data-item-row]").length <= 1) return; // mantém ao menos 1 linha
-        formEl.querySelector(`[data-item-row="${btn.dataset.removeRow}"]`).remove();
-        recalcularSubtotal(formEl);
-      };
-    });
-    formEl.querySelectorAll(".item-qtd, .item-valor").forEach((input) => {
-      input.oninput = () => recalcularSubtotal(formEl);
-    });
-  }
-
   attachItemListeners(form);
   recalcularSubtotal(form);
 
@@ -865,6 +865,9 @@ async function openOrdemModal(existingItem, prefillData = null) {
       .join("");
 
   const dataAberturaValor = isEdit && existingItem.data_abertura ? existingItem.data_abertura.slice(0, 10) : "";
+  const itensServicoExistentes = isEdit && existingItem.itens_servico && existingItem.itens_servico.length
+    ? existingItem.itens_servico
+    : [{}];
 
   const form = document.getElementById("modal-form");
   form.setAttribute("autocomplete", "off");
@@ -896,6 +899,14 @@ async function openOrdemModal(existingItem, prefillData = null) {
       </select>
     </div>
 
+    <label class="field-label-block">Serviços / Mão de obra</label>
+    <table class="items-table">
+      <thead><tr><th>Qtde./Hrs</th><th>Descrição</th><th>Unitário (R$)</th><th>Total</th><th></th></tr></thead>
+      <tbody id="itens-body">${itensServicoExistentes.map(itemRowHtml).join("")}</tbody>
+    </table>
+    <button type="button" class="btn" id="btn-add-item">+ Adicionar item</button>
+    <div class="subtotal-row">Subtotal: <strong id="subtotal-display">R$ 0,00</strong></div>
+
     <label class="field-label-block">Peças utilizadas</label>
     <div id="pecas-ja-registradas"></div>
     <div class="picker-row">
@@ -913,6 +924,13 @@ async function openOrdemModal(existingItem, prefillData = null) {
 
   document.getElementById("modal-overlay").classList.remove("hidden");
   document.getElementById("modal-cancel").addEventListener("click", closeModal);
+  document.getElementById("btn-add-item").addEventListener("click", () => {
+    document.getElementById("itens-body").insertAdjacentHTML("beforeend", itemRowHtml());
+    attachItemListeners(form);
+    recalcularSubtotal(form);
+  });
+  attachItemListeners(form);
+  recalcularSubtotal(form);
 
   // Se estiver editando, mostra o que já foi registrado nessa OS (histórico —
   // já descontou estoque, não é editável por aqui).
@@ -979,6 +997,16 @@ async function openOrdemModal(existingItem, prefillData = null) {
       else data[k] = Number(data[k]);
     });
     if (data.data_abertura === "") delete data.data_abertura;
+
+    data.itens_servico = [];
+    form.querySelectorAll("[data-item-row]").forEach((row) => {
+      const quantidade = parseFloat(row.querySelector(".item-qtd").value);
+      const valor_unitario = parseFloat(row.querySelector(".item-valor").value);
+      const descricao = row.querySelector(".item-desc").value;
+      if (descricao && !isNaN(quantidade) && !isNaN(valor_unitario)) {
+        data.itens_servico.push({ quantidade, descricao, valor_unitario });
+      }
+    });
 
     try {
       let osId;

@@ -21,16 +21,25 @@ def _substituir_itens_servico(os_: models.OrdemServico, itens: list[schemas.Item
         )
 
 
+def _buscar_equipamentos(db: Session, equipamento_ids: list[int]) -> list[models.Equipamento]:
+    if not equipamento_ids:
+        return []
+    equipamentos = db.query(models.Equipamento).filter(models.Equipamento.id.in_(equipamento_ids)).all()
+    encontrados_ids = {e.id for e in equipamentos}
+    faltando = set(equipamento_ids) - encontrados_ids
+    if faltando:
+        raise HTTPException(status_code=400, detail=f"Equipamentos não encontrados: {sorted(faltando)}")
+    return equipamentos
+
+
 @router.post("/", response_model=schemas.OrdemServicoOut, status_code=201)
 def criar_ordem_servico(os_: schemas.OrdemServicoCreate, db: Session = Depends(get_db)):
     if not db.get(models.Cliente, os_.cliente_id):
         raise HTTPException(status_code=400, detail="Cliente informado não existe")
-    if os_.equipamento_id and not db.get(models.Equipamento, os_.equipamento_id):
-        raise HTTPException(status_code=400, detail="Equipamento informado não existe")
     if os_.orcamento_id and not db.get(models.Orcamento, os_.orcamento_id):
         raise HTTPException(status_code=400, detail="Orçamento informado não existe")
 
-    dados = os_.model_dump(exclude={"itens_servico"})
+    dados = os_.model_dump(exclude={"itens_servico", "equipamento_ids"})
     if dados.get("data_abertura") is None:
         dados.pop("data_abertura", None)  # deixa o default do model (agora) valer
 
@@ -39,6 +48,7 @@ def criar_ordem_servico(os_: schemas.OrdemServicoCreate, db: Session = Depends(g
         models.ItemServicoOS(descricao=i.descricao, quantidade=i.quantidade, valor_unitario=i.valor_unitario)
         for i in os_.itens_servico
     ]
+    nova.equipamentos = _buscar_equipamentos(db, os_.equipamento_ids)
 
     db.add(nova)
     db.commit()
@@ -74,12 +84,15 @@ def atualizar_ordem_servico(os_id: int, dados: schemas.OrdemServicoUpdate, db: S
     if not os_:
         raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
 
-    campos = dados.model_dump(exclude_unset=True, exclude={"itens_servico"})
+    campos = dados.model_dump(exclude_unset=True, exclude={"itens_servico", "equipamento_ids"})
     for campo, valor in campos.items():
         setattr(os_, campo, valor)
 
     if dados.itens_servico is not None:
         _substituir_itens_servico(os_, dados.itens_servico)
+
+    if dados.equipamento_ids is not None:
+        os_.equipamentos = _buscar_equipamentos(db, dados.equipamento_ids)
 
     # Se o status virou "concluído" e nenhuma data de conclusão foi informada
     # nessa mesma atualização, registra a data de hoje automaticamente —

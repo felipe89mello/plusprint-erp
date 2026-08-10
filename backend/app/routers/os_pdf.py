@@ -73,12 +73,15 @@ def _gerar_pdf_os_bytes(os_: models.OrdemServico) -> bytes:
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
     story.append(t)
 
-    if os_.equipamento:
-        story.append(Paragraph("Equipamento", section_style))
-        eq = os_.equipamento
-        eq_rows = [linha("Marca / Modelo", f"{eq.marca} {eq.modelo}")]
-        if eq.numero_serie:
-            eq_rows.append(linha("Serial", eq.numero_serie))
+    if os_.equipamentos:
+        titulo_eq = "Equipamento" if len(os_.equipamentos) <= 1 else "Equipamentos"
+        story.append(Paragraph(titulo_eq, section_style))
+        eq_rows = []
+        for eq in os_.equipamentos:
+            descricao_eq = f"{eq.marca} {eq.modelo}"
+            if eq.numero_serie:
+                descricao_eq += f" — SN {eq.numero_serie}"
+            eq_rows.append(linha("Equipamento", descricao_eq))
         t = Table(eq_rows, colWidths=[30 * mm, 140 * mm])
         t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
         story.append(t)

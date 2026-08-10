@@ -14,6 +14,15 @@ contrato_equipamento = Table(
     Column("equipamento_id", Integer, ForeignKey("equipamentos.id"), primary_key=True),
 )
 
+# Tabela associativa (N:N) entre Ordem de Serviço e Equipamento — uma OS pode
+# atender vários equipamentos do mesmo cliente numa única visita.
+ordem_servico_equipamento = Table(
+    "ordem_servico_equipamento",
+    Base.metadata,
+    Column("ordem_servico_id", Integer, ForeignKey("ordens_servico.id"), primary_key=True),
+    Column("equipamento_id", Integer, ForeignKey("equipamentos.id"), primary_key=True),
+)
+
 
 class Cliente(Base):
     __tablename__ = "clientes"
@@ -43,7 +52,7 @@ class Equipamento(Base):
     tipo = Column(String(50), nullable=True)  # ex: impressora, leitor
 
     cliente = relationship("Cliente", back_populates="equipamentos")
-    ordens_servico = relationship("OrdemServico", back_populates="equipamento")
+    ordens_servico = relationship("OrdemServico", secondary="ordem_servico_equipamento", back_populates="equipamentos")
     contratos = relationship("Contrato", secondary=contrato_equipamento, back_populates="equipamentos")
     orcamento_vinculos = relationship("OrcamentoEquipamento", back_populates="equipamento")
 
@@ -54,7 +63,6 @@ class OrdemServico(Base):
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(String(20), nullable=True)  # nº da OS, preenchido manualmente
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
-    equipamento_id = Column(Integer, ForeignKey("equipamentos.id"), nullable=True)
     orcamento_id = Column(Integer, ForeignKey("orcamentos.id"), nullable=True)  # orçamento que originou esta OS
     descricao = Column(Text, nullable=False)
     status = Column(String(30), default="aberto")  # aberto | em_andamento | concluido
@@ -62,7 +70,7 @@ class OrdemServico(Base):
     data_conclusao = Column(DateTime, nullable=True)
 
     cliente = relationship("Cliente", back_populates="ordens_servico")
-    equipamento = relationship("Equipamento", back_populates="ordens_servico")
+    equipamentos = relationship("Equipamento", secondary=ordem_servico_equipamento, back_populates="ordens_servico")
     orcamento = relationship("Orcamento", back_populates="ordens_servico")
     itens_peca = relationship("ItemPecaOS", back_populates="ordem_servico", cascade="all, delete-orphan")
     itens_servico = relationship("ItemServicoOS", back_populates="ordem_servico", cascade="all, delete-orphan")

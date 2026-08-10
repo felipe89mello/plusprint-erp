@@ -88,7 +88,6 @@ class ItemServicoOSOut(ItemServicoOSCreate):
 class OrdemServicoBase(BaseModel):
     numero: Optional[str] = None
     cliente_id: int
-    equipamento_id: Optional[int] = None
     orcamento_id: Optional[int] = None  # orçamento que originou esta OS, se houver
     descricao: str
     status: str = "aberto"
@@ -97,16 +96,17 @@ class OrdemServicoBase(BaseModel):
 class OrdemServicoCreate(OrdemServicoBase):
     data_abertura: Optional[datetime] = None  # se não informado, usa a data/hora atual
     itens_servico: list[ItemServicoOSCreate] = []
+    equipamento_ids: list[int] = []
 
 
 class OrdemServicoUpdate(BaseModel):
-    equipamento_id: Optional[int] = None
     orcamento_id: Optional[int] = None
     descricao: Optional[str] = None
     status: Optional[str] = None
     data_abertura: Optional[datetime] = None
     data_conclusao: Optional[datetime] = None
     itens_servico: Optional[list[ItemServicoOSCreate]] = None
+    equipamento_ids: Optional[list[int]] = None
 
 
 class OrdemServicoOut(OrdemServicoBase):
@@ -116,6 +116,7 @@ class OrdemServicoOut(OrdemServicoBase):
     data_conclusao: Optional[datetime] = None
     itens_servico: list[ItemServicoOSOut] = []
     valor_total: Decimal = Decimal("0")
+    equipamento_ids: list[int] = []
 
     @classmethod
     def from_model(cls, os_):
@@ -125,6 +126,7 @@ class OrdemServicoOut(OrdemServicoBase):
         data["data_conclusao"] = os_.data_conclusao
         data["itens_servico"] = [ItemServicoOSOut.from_model(i) for i in os_.itens_servico]
         data["valor_total"] = sum((i.quantidade * i.valor_unitario for i in os_.itens_servico), Decimal("0"))
+        data["equipamento_ids"] = [e.id for e in os_.equipamentos]
         return cls(**data)
 
 

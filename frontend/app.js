@@ -60,7 +60,6 @@ const ENTITIES = {
     ],
     fields: [
       { name: "cliente_id", label: "Cliente", type: "select", relation: "clientes", required: true },
-      { name: "equipamento_id", label: "Equipamento", type: "select", relation: "equipamentos" },
       { name: "orcamento_id", label: "Orçamento de origem (opcional)", type: "select", relation: "orcamentos" },
       { name: "descricao", label: "Descrição", type: "textarea", required: true },
       { name: "status", label: "Status", type: "select", options: ["aberto", "em_andamento", "concluido"] },
@@ -471,10 +470,9 @@ function montarDescricaoOS(orcamento) {
 
 async function handleGerarOS(orcamento) {
   if (!cache.equipamentos) cache.equipamentos = await apiGet(ENTITIES.equipamentos.endpoint);
-  const primeiroEquip = orcamento.equipamentos && orcamento.equipamentos[0];
   const prefill = {
     cliente_id: orcamento.cliente_id,
-    equipamento_id: (primeiroEquip && primeiroEquip.equipamento_id) || "",
+    equipamento_ids: (orcamento.equipamentos || []).map((e) => e.equipamento_id),
     orcamento_id: orcamento.id,
     descricao: montarDescricaoOS(orcamento),
     status: "aberto",
@@ -840,6 +838,7 @@ async function openOrdemModal(existingItem, prefillData = null) {
   const config = ENTITIES.ordens;
   await preloadRelations(config);
   if (!cache.pecas) cache.pecas = await apiGet(ENTITIES.pecas.endpoint);
+  if (!cache.equipamentos) cache.equipamentos = await apiGet(ENTITIES.equipamentos.endpoint);
 
   const isEdit = existingItem != null;
   document.getElementById("modal-title").textContent = `${isEdit ? "Editar" : "Novo"} — Ordem de Serviço`;
@@ -854,12 +853,23 @@ async function openOrdemModal(existingItem, prefillData = null) {
   const clientesOptions = (cache.clientes || [])
     .map((c) => `<option value="${c.id}" ${String(c.id) === String(v("cliente_id")) ? "selected" : ""}>${c.nome}</option>`)
     .join("");
-  const equipamentosOptions = (cache.equipamentos || [])
-    .map((e) => `<option value="${e.id}" ${String(e.id) === String(v("equipamento_id")) ? "selected" : ""}>${labelForItem(e)}</option>`)
-    .join("");
   const orcamentosOptions = (cache.orcamentos || [])
     .map((o) => `<option value="${o.id}" ${String(o.id) === String(v("orcamento_id")) ? "selected" : ""}>${labelForItem(o)}</option>`)
     .join("");
+
+  // Equipamentos vinculados a esta OS — lista simples (picker + etiqueta removível).
+  const equipamentoIdsExistentes = isEdit
+    ? existingItem.equipamento_ids || []
+    : (prefillData && prefillData.equipamento_ids) || [];
+  let equipamentosOS = equipamentoIdsExistentes
+    .map((id) => (cache.equipamentos || []).find((e) => e.id === id))
+    .filter(Boolean);
+
+  const equipOSPickerOptions = () =>
+    (cache.equipamentos || [])
+      .filter((e) => !equipamentosOS.some((s) => s.id === e.id))
+      .map((e) => `<option value="${e.id}">${labelForItem(e)}</option>`)
+      .join("");
 
   // Peças que serão registradas ao salvar (novas — ainda não descontadas do estoque)
   let pecasNovas = [];
@@ -890,18 +900,20 @@ async function openOrdemModal(existingItem, prefillData = null) {
       </div>
     </div>
 
-    <div class="field-row">
-      <div class="field"><label>Equipamento</label>
-        <select name="equipamento_id"><option value="">— nenhum —</option>${equipamentosOptions}</select>
+    <div class="field">
+      <label>Equipamento(s)</label>
+      <div class="picker-row">
+        <select id="os-equip-picker">${equipOSPickerOptions()}</select>
+        <button type="button" class="btn" id="btn-add-os-equip">+ Adicionar</button>
       </div>
-      <div class="field"><label>Orçamento de origem (opcional)</label>
-        <select name="orcamento_id"><option value="">— nenhum —</option>${orcamentosOptions}</select>
-      </div>
+      <div id="os-equip-chips" class="chips-wrap"></div>
     </div>
 
     <div class="field-row">
+      <div class="field"><label>Orçamento de origem (opcional)</label>
+        <select name="orcamento_id"><option value="">— nenhum —</option>${orcamentosOptions}</select>
+      </div>
       <div class="field"><label>Data de abertura</label><input type="date" name="data_abertura" value="${dataAberturaValor}" placeholder="hoje"></div>
-      <div></div>
     </div>
 
     <div class="field"><label>Descrição *</label><textarea name="descricao" required>${v("descricao")}</textarea></div>
@@ -944,6 +956,35 @@ async function openOrdemModal(existingItem, prefillData = null) {
   });
   attachItemListeners(form);
   recalcularSubtotal(form);
+
+  function renderEquipOSChips() {
+    const wrap = document.getElementById("os-equip-chips");
+    wrap.innerHTML = equipamentosOS.length
+      ? equipamentosOS
+          .map((e) => `<span class="chip">${labelForItem(e)}<button type="button" data-remove-os-equip="${e.id}">×</button></span>`)
+          .join("")
+      : `<span class="chips-empty">Nenhum equipamento adicionado</span>`;
+    wrap.querySelectorAll("[data-remove-os-equip]").forEach((btn) => {
+      btn.onclick = () => {
+        equipamentosOS = equipamentosOS.filter((e) => e.id !== Number(btn.dataset.removeOsEquip));
+        document.getElementById("os-equip-picker").innerHTML = equipOSPickerOptions();
+        renderEquipOSChips();
+      };
+    });
+  }
+
+  document.getElementById("btn-add-os-equip").addEventListener("click", () => {
+    const picker = document.getElementById("os-equip-picker");
+    if (!picker.value) return;
+    const equip = (cache.equipamentos || []).find((e) => e.id === Number(picker.value));
+    if (equip && !equipamentosOS.some((e) => e.id === equip.id)) {
+      equipamentosOS.push(equip);
+      picker.innerHTML = equipOSPickerOptions();
+      renderEquipOSChips();
+    }
+  });
+
+  renderEquipOSChips();
 
   // Se estiver editando, mostra o que já foi registrado nessa OS (histórico —
   // já descontou estoque, não é editável por aqui).
@@ -1005,12 +1046,14 @@ async function openOrdemModal(existingItem, prefillData = null) {
     const fd = new FormData(form);
     const data = Object.fromEntries(fd.entries());
 
-    ["cliente_id", "equipamento_id", "orcamento_id"].forEach((k) => {
+    ["cliente_id", "orcamento_id"].forEach((k) => {
       if (data[k] === "") delete data[k];
       else data[k] = Number(data[k]);
     });
     if (data.data_abertura === "") delete data.data_abertura;
     if (data.numero === "") delete data.numero;
+
+    data.equipamento_ids = equipamentosOS.map((e) => e.id);
 
     data.itens_servico = [];
     form.querySelectorAll("[data-item-row]").forEach((row) => {

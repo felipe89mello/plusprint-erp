@@ -52,6 +52,7 @@ class OrdemServico(Base):
     __tablename__ = "ordens_servico"
 
     id = Column(Integer, primary_key=True, index=True)
+    numero = Column(String(20), nullable=True)  # nº da OS, preenchido manualmente
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     equipamento_id = Column(Integer, ForeignKey("equipamentos.id"), nullable=True)
     orcamento_id = Column(Integer, ForeignKey("orcamentos.id"), nullable=True)  # orçamento que originou esta OS

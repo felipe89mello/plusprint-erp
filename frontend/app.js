@@ -52,6 +52,7 @@ const ENTITIES = {
     custom: true, // este módulo usa formulário próprio (openOrdemModal) — inclui peças utilizadas
     columns: [
       { key: "id", label: "ID", mono: true },
+      { key: "numero", label: "Nº" },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
       { key: "descricao", label: "Descrição" },
       { key: "status", label: "Status", badge: true },
@@ -880,22 +881,27 @@ async function openOrdemModal(existingItem, prefillData = null) {
   form.setAttribute("autocomplete", "off");
   form.innerHTML = `
     <div class="field-row">
+      <div class="field"><label>Nº da OS</label><input type="text" name="numero" value="${v("numero")}"></div>
       <div class="field"><label>Cliente *</label>
         <select name="cliente_id" required>
           <option value="">Selecione...</option>
           ${clientesOptions}
         </select>
       </div>
+    </div>
+
+    <div class="field-row">
       <div class="field"><label>Equipamento</label>
         <select name="equipamento_id"><option value="">— nenhum —</option>${equipamentosOptions}</select>
+      </div>
+      <div class="field"><label>Orçamento de origem (opcional)</label>
+        <select name="orcamento_id"><option value="">— nenhum —</option>${orcamentosOptions}</select>
       </div>
     </div>
 
     <div class="field-row">
-      <div class="field"><label>Orçamento de origem (opcional)</label>
-        <select name="orcamento_id"><option value="">— nenhum —</option>${orcamentosOptions}</select>
-      </div>
       <div class="field"><label>Data de abertura</label><input type="date" name="data_abertura" value="${dataAberturaValor}" placeholder="hoje"></div>
+      <div></div>
     </div>
 
     <div class="field"><label>Descrição *</label><textarea name="descricao" required>${v("descricao")}</textarea></div>
@@ -1004,6 +1010,7 @@ async function openOrdemModal(existingItem, prefillData = null) {
       else data[k] = Number(data[k]);
     });
     if (data.data_abertura === "") delete data.data_abertura;
+    if (data.numero === "") delete data.numero;
 
     data.itens_servico = [];
     form.querySelectorAll("[data-item-row]").forEach((row) => {

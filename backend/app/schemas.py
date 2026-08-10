@@ -86,6 +86,7 @@ class ItemServicoOSOut(ItemServicoOSCreate):
 
 
 class OrdemServicoBase(BaseModel):
+    numero: Optional[str] = None
     cliente_id: int
     equipamento_id: Optional[int] = None
     orcamento_id: Optional[int] = None  # orçamento que originou esta OS, se houver

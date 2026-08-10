@@ -55,7 +55,8 @@ def _gerar_pdf_os_bytes(os_: models.OrdemServico) -> bytes:
     abertura_txt = os_.data_abertura.strftime("%d/%m/%Y")
     conclusao_txt = os_.data_conclusao.strftime("%d/%m/%Y") if os_.data_conclusao else "—"
     status_txt = STATUS_LABEL.get(os_.status, os_.status)
-    story.append(Paragraph(f"OS nº {os_.id}  ·  Abertura: {abertura_txt}  ·  Conclusão: {conclusao_txt}  ·  Status: {status_txt}", label_style))
+    numero_os = os_.numero or os_.id
+    story.append(Paragraph(f"OS nº {numero_os}  ·  Abertura: {abertura_txt}  ·  Conclusão: {conclusao_txt}  ·  Status: {status_txt}", label_style))
     story.append(Spacer(1, 10))
 
     def linha(label, valor):
@@ -161,16 +162,6 @@ def _gerar_pdf_os_bytes(os_: models.OrdemServico) -> bytes:
     tecnico = os_.orcamento.tecnico_responsavel if os_.orcamento else None
     story.append(Spacer(1, 18))
     story.append(Paragraph(f"Técnico Responsável: {tecnico or '—'}", body_style))
-    story.append(Spacer(1, 24))
-    assinatura_data = [["Nome:", ""], ["Assinatura:", ""]]
-    t = Table(assinatura_data, colWidths=[25 * mm, 120 * mm])
-    t.setStyle(TableStyle([
-        ("LINEBELOW", (1, 0), (1, 0), 0.7, INK),
-        ("LINEBELOW", (1, 1), (1, 1), 0.7, INK),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
-        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
-    ]))
-    story.append(t)
 
     doc.build(story)
     buffer.seek(0)
@@ -185,7 +176,8 @@ def gerar_pdf_os(os_id: int, db: Session = Depends(get_db)):
 
     pdf_bytes = _gerar_pdf_os_bytes(os_)
     cliente_slug = _slugify(os_.cliente.nome)
-    filename = f"os_{os_.id}_{cliente_slug}.pdf"
+    numero_os = os_.numero or os_.id
+    filename = f"os_{numero_os}_{cliente_slug}.pdf"
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

@@ -110,5 +110,11 @@ def excluir_orcamento(orcamento_id: int, db: Session = Depends(get_db)):
     orcamento = db.get(models.Orcamento, orcamento_id)
     if not orcamento:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
+
+    # Se já existem OS geradas a partir deste orçamento, desvincula (mantém a
+    # OS, só remove a referência) em vez de bloquear/apagar a exclusão.
+    for os_ in orcamento.ordens_servico:
+        os_.orcamento_id = None
+
     db.delete(orcamento)
     db.commit()

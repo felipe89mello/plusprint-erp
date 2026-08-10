@@ -110,6 +110,8 @@ const ENTITIES = {
       { key: "id", label: "ID", mono: true },
       { key: "nome", label: "Nome" },
       { key: "partnumber", label: "Partnumber", mono: true },
+      { key: "marca", label: "Marca" },
+      { key: "modelo", label: "Modelo" },
       { key: "quantidade_estoque", label: "Estoque", mono: true, lowStock: true },
       { key: "valor_compra", label: "Custo (compra)", money: true },
       { key: "valor_unitario", label: "Valor de venda", money: true },
@@ -117,6 +119,8 @@ const ENTITIES = {
     fields: [
       { name: "nome", label: "Nome", type: "text", required: true },
       { name: "partnumber", label: "Partnumber", type: "text" },
+      { name: "marca", label: "Marca da impressora", type: "text", placeholder: "ex: Zebra" },
+      { name: "modelo", label: "Modelo da impressora", type: "text", placeholder: "ex: ZT411" },
       { name: "quantidade_estoque", label: "Quantidade em estoque", type: "number", required: true },
       { name: "valor_compra", label: "Valor de compra / custo (R$)", type: "number" },
       { name: "valor_unitario", label: "Valor de venda (R$)", type: "number", required: true },
@@ -532,7 +536,7 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
         }
         return `<div class="field">
           <label>${f.label}${f.required ? " *" : ""}</label>
-          <input type="${f.type}" name="${f.name}" value="${valueAttr}" ${f.type === "number" ? 'step="0.01"' : ""} ${f.required ? "required" : ""}>
+          <input type="${f.type}" name="${f.name}" value="${valueAttr}" ${f.placeholder ? `placeholder="${f.placeholder}"` : ""} ${f.type === "number" ? 'step="0.01"' : ""} ${f.required ? "required" : ""}>
         </div>`;
       })
       .join("") +
@@ -861,7 +865,10 @@ async function openOrdemModal(existingItem, prefillData = null) {
 
   const pecasPickerOptions = () =>
     (cache.pecas || [])
-      .map((p) => `<option value="${p.id}">${p.nome}${p.partnumber ? " — " + p.partnumber : ""} (estoque: ${p.quantidade_estoque})</option>`)
+      .map((p) => {
+        const compat = [p.marca, p.modelo].filter(Boolean).join(" ");
+        return `<option value="${p.id}">${p.nome}${p.partnumber ? " — " + p.partnumber : ""}${compat ? " (" + compat + ")" : ""} — estoque: ${p.quantidade_estoque}</option>`;
+      })
       .join("");
 
   const dataAberturaValor = isEdit && existingItem.data_abertura ? existingItem.data_abertura.slice(0, 10) : "";

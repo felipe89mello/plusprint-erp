@@ -90,20 +90,22 @@ def _gerar_pdf_os_bytes(os_: models.OrdemServico) -> bytes:
     story.append(Paragraph("Descrição do Atendimento", section_style))
     story.append(Paragraph((os_.descricao or "—").replace("\n", "<br/>"), body_style))
 
+    subtotal_pecas = 0
+    subtotal_servicos = 0
+
     if os_.itens_peca:
         story.append(Paragraph("Peças Utilizadas", section_style))
         tabela_dados = [["Qtde.", "Peça", "Unitário", "Total"]]
-        subtotal = 0
         for item in os_.itens_peca:
             total_item = item.quantidade_usada * item.valor_unitario_na_epoca
-            subtotal += total_item
+            subtotal_pecas += total_item
             tabela_dados.append([
                 str(item.quantidade_usada),
                 item.peca.nome if item.peca else "—",
                 f"R$ {item.valor_unitario_na_epoca:.2f}",
                 f"R$ {total_item:.2f}",
             ])
-        tabela_dados.append(["", "", "Subtotal", f"R$ {subtotal:.2f}"])
+        tabela_dados.append(["", "", "Subtotal", f"R$ {subtotal_pecas:.2f}"])
         pecas_table = Table(tabela_dados, colWidths=[20 * mm, 90 * mm, 28 * mm, 32 * mm])
         pecas_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), INK),
@@ -122,17 +124,16 @@ def _gerar_pdf_os_bytes(os_: models.OrdemServico) -> bytes:
     if os_.itens_servico:
         story.append(Paragraph("Serviços / Mão de Obra", section_style))
         tabela_serv = [["Qtde./Hrs", "Descrição", "Unitário", "Total"]]
-        subtotal_serv = 0
         for item in os_.itens_servico:
             total_item = item.quantidade * item.valor_unitario
-            subtotal_serv += total_item
+            subtotal_servicos += total_item
             tabela_serv.append([
                 f"{item.quantidade:g}",
                 item.descricao,
                 f"R$ {item.valor_unitario:.2f}",
                 f"R$ {total_item:.2f}",
             ])
-        tabela_serv.append(["", "", "Subtotal", f"R$ {subtotal_serv:.2f}"])
+        tabela_serv.append(["", "", "Subtotal", f"R$ {subtotal_servicos:.2f}"])
         serv_table = Table(tabela_serv, colWidths=[22 * mm, 88 * mm, 28 * mm, 32 * mm])
         serv_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), INK),
@@ -147,6 +148,15 @@ def _gerar_pdf_os_bytes(os_: models.OrdemServico) -> bytes:
             ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ]))
         story.append(serv_table)
+
+    if os_.itens_peca or os_.itens_servico:
+        total_geral = subtotal_pecas + subtotal_servicos
+        story.append(Spacer(1, 8))
+        total_geral_style = ParagraphStyle(
+            "total_geral", parent=styles["Normal"], fontSize=12, fontName="Helvetica-Bold",
+            textColor=INK, alignment=2,  # 2 = alinhado à direita
+        )
+        story.append(Paragraph(f"Total Geral: R$ {total_geral:.2f}", total_geral_style))
 
     tecnico = os_.orcamento.tecnico_responsavel if os_.orcamento else None
     story.append(Spacer(1, 18))

@@ -97,5 +97,12 @@ def excluir_ordem_servico(os_id: int, db: Session = Depends(get_db)):
     os_ = db.get(models.OrdemServico, os_id)
     if not os_:
         raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
+
+    # Devolve ao estoque as peças que haviam sido descontadas para esta OS,
+    # antes de excluir os registros de uso (o cascade cuida do resto).
+    for item in os_.itens_peca:
+        if item.peca:
+            item.peca.quantidade_estoque += item.quantidade_usada
+
     db.delete(os_)
     db.commit()

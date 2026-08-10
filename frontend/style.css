@@ -286,6 +286,7 @@ tbody td {
 
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #FAFAF8; }
+tbody tr[data-open-os] { cursor: pointer; }
 
 .mono { font-family: var(--font-mono); }
 

@@ -54,9 +54,9 @@ const ENTITIES = {
       { key: "id", label: "ID", mono: true },
       { key: "numero", label: "Nº" },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
-      { key: "descricao", label: "Descrição" },
       { key: "status", label: "Status", badge: true },
       { key: "data_abertura", label: "Data de abertura", date: true },
+      { key: "data_conclusao", label: "Data de conclusão", date: true },
     ],
     fields: [
       { name: "cliente_id", label: "Cliente", type: "select", relation: "clientes", required: true },
@@ -407,7 +407,8 @@ async function renderList(viewKey) {
           viewKey === "orcamentos" && item.status === "aprovado"
             ? `<button class="btn btn-os" data-gerar-os="${item.id}">Gerar OS</button>`
             : "";
-        return `<tr>${cells}<td class="row-actions">${pdfBtn}${osBtn}<button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
+        const rowAttr = viewKey === "ordens" ? `data-open-os="${item.id}"` : "";
+        return `<tr ${rowAttr}>${cells}<td class="row-actions">${pdfBtn}${osBtn}<button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
       })
       .join("");
 
@@ -441,6 +442,13 @@ async function renderList(viewKey) {
         if (viewKey === "orcamentos") openOrcamentoModal(item);
         else if (viewKey === "ordens") openOrdemModal(item);
         else openModal(viewKey, item);
+      });
+    });
+    root.querySelectorAll("[data-open-os]").forEach((tr) => {
+      tr.addEventListener("click", (ev) => {
+        if (ev.target.closest("button")) return; // não interfere nos botões da linha
+        const item = items.find((i) => String(i.id) === tr.dataset.openOs);
+        openOrdemModal(item);
       });
     });
   } catch (e) {

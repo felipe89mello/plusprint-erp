@@ -206,85 +206,81 @@ def _gerar_pdf_tecnico(orcamento: models.Orcamento) -> bytes:
 def _gerar_pdf_venda(orcamento: models.Orcamento) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
-        buffer, pagesize=A4, topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=16 * mm, rightMargin=16 * mm
+        buffer,
+        pagesize=A4,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
     )
     styles = getSampleStyleSheet()
     label_style = ParagraphStyle("label", parent=styles["Normal"], fontSize=8.5, textColor=colors.grey)
-    value_style = ParagraphStyle("value", parent=styles["Normal"], fontSize=9.5, textColor=INK)
-    body_style = ParagraphStyle("body", parent=styles["Normal"], fontSize=9, leading=13)
+    value_style = ParagraphStyle("value", parent=styles["Normal"], fontSize=10, textColor=INK)
+    section_style = ParagraphStyle(
+        "section", parent=styles["Heading3"], fontSize=11, textColor=AMBER, spaceBefore=14, spaceAfter=6
+    )
+    body_style = ParagraphStyle("body", parent=styles["Normal"], fontSize=9.5, leading=13)
     cell_style = ParagraphStyle("cell", parent=styles["Normal"], fontSize=7.5, leading=9.5, textColor=INK)
-    cell_header_style = ParagraphStyle("cell_header", parent=cell_style, fontSize=7.5, textColor=INK, fontName="Helvetica-Bold")
+    cell_header_style = ParagraphStyle("cell_header", parent=cell_style, fontSize=7.5, textColor=colors.white, fontName="Helvetica-Bold")
 
     story = []
     cliente = orcamento.cliente
-    titulo_style = ParagraphStyle("title", parent=styles["Title"], fontSize=14, textColor=INK, alignment=0)
-
-    numero_txt = orcamento.numero or str(orcamento.id)
-    data_txt = orcamento.data.strftime("%d/%m/%Y")
-    meta_table = Table(
-        [["Proposta Comercial nº.:", numero_txt], ["Data:", data_txt]],
-        colWidths=[36 * mm, 30 * mm],
-    )
-    meta_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.5, LINE),
-        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("ALIGN", (1, 0), (1, -1), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
+    titulo_style = ParagraphStyle("title", parent=styles["Title"], fontSize=15, textColor=INK, alignment=0)
 
     if os.path.exists(LOGO_PATH):
-        logo = Image(LOGO_PATH, width=16 * mm, height=16 * mm)
-        header_left = Table([[logo, Paragraph("ORÇAMENTO TÉCNICO COMERCIAL", titulo_style)]], colWidths=[20 * mm, 100 * mm])
-        header_left.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
+        logo = Image(LOGO_PATH, width=20 * mm, height=20 * mm)
+        header_table = Table([[logo, Paragraph("ORÇAMENTO TÉCNICO COMERCIAL", titulo_style)]], colWidths=[24 * mm, 146 * mm])
+        header_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (0, 0), 0),
+        ]))
+        story.append(header_table)
     else:
-        header_left = Paragraph("ORÇAMENTO TÉCNICO COMERCIAL", titulo_style)
+        story.append(Table([[Paragraph("ORÇAMENTO TÉCNICO COMERCIAL", titulo_style)]], colWidths=[170 * mm]))
+    story.append(Spacer(1, 2))
 
-    header_table = Table([[header_left, meta_table]], colWidths=[120 * mm, 58 * mm])
-    header_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story.append(header_table)
+    numero_txt = f"Proposta nº {orcamento.numero}" if orcamento.numero else f"Proposta nº {orcamento.id}"
+    data_txt = orcamento.data.strftime("%d/%m/%Y")
+    story.append(Paragraph(f"{numero_txt}  ·  Data: {data_txt}", label_style))
     story.append(Spacer(1, 10))
 
-    def linha_par(label1, valor1, label2, valor2):
-        return [Paragraph(f"<b>{label1}</b>", label_style), Paragraph(valor1 or "—", value_style),
-                Paragraph(f"<b>{label2}</b>", label_style), Paragraph(valor2 or "—", value_style)]
+    # Dados do cliente — mesmo padrão label/valor do orçamento técnico
+    def linha(label, valor):
+        return [Paragraph(label, label_style), Paragraph(valor or "—", value_style)]
 
-    cliente_table = Table(
-        [
-            linha_par("Cliente:", cliente.nome, "CNPJ:", cliente.cnpj_cpf),
-            linha_par("Endereço:", cliente.endereco, "Tel.:", cliente.telefone),
-            linha_par("Contato:", cliente.contato_nome, "E-mail:", cliente.email),
-        ],
-        colWidths=[20 * mm, 90 * mm, 16 * mm, 52 * mm],
-    )
-    cliente_table.setStyle(TableStyle([
+    contato_plusprint = f"{orcamento.tecnico_responsavel or '—'}  ·  {PLUSPRINT_EMAIL}  ·  {PLUSPRINT_FONE}"
+    cliente_rows = [
+        linha("Cliente", cliente.nome),
+        linha("Endereço", cliente.endereco),
+        linha("Contato", cliente.contato_nome),
+        linha("CNPJ/CPF", cliente.cnpj_cpf),
+        linha("E-mail", cliente.email),
+        linha("Telefone", cliente.telefone),
+        linha("Contato Plusprint", contato_plusprint),
+    ]
+    t = Table(cliente_rows, colWidths=[30 * mm, 140 * mm])
+    t.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
     ]))
-    story.append(cliente_table)
-    story.append(Spacer(1, 6))
+    story.append(t)
 
-    plusprint_table = Table(
-        [[
-            Paragraph("<b>Contato Plusprint:</b>", label_style), Paragraph(orcamento.tecnico_responsavel or "—", value_style),
-            Paragraph("<b>E-mail:</b>", label_style), Paragraph(PLUSPRINT_EMAIL, value_style),
-            Paragraph("<b>Fone:</b>", label_style), Paragraph(PLUSPRINT_FONE, value_style),
-        ]],
-        colWidths=[26 * mm, 28 * mm, 14 * mm, 46 * mm, 12 * mm, 28 * mm],
-    )
-    story.append(plusprint_table)
-    story.append(Spacer(1, 10))
-
-    # Tabela de itens — Item, NCM, Part Number, Descrição, Quant., Unid., Garantia, Prazo, IPI, ICMS, Preço Unitário
-    cabecalho = ["Item", "NCM", "Part Number", "Descrição do Item", "Quant.", "Unid.", "Garantia\n(Meses)", "Prazo de\nEntrega", "IPI", "ICMS", "Preço Unitário"]
+    # Itens — Item, NCM, Part Number, Descrição, Quant., Unid., Garantia, Prazo, Preço Unitário
+    story.append(Paragraph("Equipamento(s)", section_style))
+    cabecalho = ["Item", "NCM", "Part Number", "Descrição do Item", "Quant.", "Unid.", "Garantia\n(Meses)", "Prazo de\nEntrega", "Preço Unitário"]
     tabela_dados = [[Paragraph(c.replace("\n", "<br/>"), cell_header_style) for c in cabecalho]]
 
     valor_total = 0
+    ipi_repr = None
+    icms_repr = None
     for idx, item in enumerate(orcamento.itens_venda, start=1):
         total_item = item.quantidade * item.preco_unitario
         valor_total += total_item
+        if ipi_repr is None and item.ipi_percentual is not None:
+            ipi_repr = item.ipi_percentual
+        if icms_repr is None and item.icms_percentual is not None:
+            icms_repr = item.icms_percentual
         tabela_dados.append([
             Paragraph(str(idx), cell_style),
             Paragraph(item.ncm or "—", cell_style),
@@ -294,67 +290,51 @@ def _gerar_pdf_venda(orcamento: models.Orcamento) -> bytes:
             Paragraph(item.unidade or "—", cell_style),
             Paragraph(str(item.garantia_meses) if item.garantia_meses is not None else "—", cell_style),
             Paragraph(item.prazo_entrega or "—", cell_style),
-            Paragraph(f"{item.ipi_percentual:g}%" if item.ipi_percentual is not None else "—", cell_style),
-            Paragraph(f"{item.icms_percentual:g}%" if item.icms_percentual is not None else "—", cell_style),
             Paragraph(f"R$ {item.preco_unitario:,.2f}", cell_style),
         ])
 
+    tabela_dados.append(["", "", "", "", "", "", "", "Total", f"R$ {valor_total:,.2f}"])
+
     itens_table = Table(
         tabela_dados,
-        colWidths=[8 * mm, 16 * mm, 20 * mm, 46 * mm, 11 * mm, 11 * mm, 13 * mm, 15 * mm, 9 * mm, 9 * mm, 22 * mm],
+        colWidths=[10 * mm, 16 * mm, 20 * mm, 43 * mm, 14 * mm, 11 * mm, 17 * mm, 15 * mm, 24 * mm],
     )
     itens_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F0F0EC")),
-        ("GRID", (0, 0), (-1, -1), 0.5, LINE),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (0, 0), (-1, 0), INK),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+        ("TOPPADDING", (0, 0), (-1, 0), 6),
+        ("GRID", (0, 0), (-1, -2), 0.5, LINE),
+        ("LINEABOVE", (0, -1), (-1, -1), 1, INK),
+        ("FONTNAME", (-2, -1), (-1, -1), "Helvetica-Bold"),
         ("ALIGN", (4, 0), (-1, -1), "CENTER"),
-        ("ALIGN", (-1, 1), (-1, -1), "RIGHT"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("ALIGN", (-2, -1), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 5),
+        ("TOPPADDING", (0, 1), (-1, -1), 5),
     ]))
     story.append(itens_table)
-    story.append(Spacer(1, 6))
-
-    total_table = Table([["Total:", f"R$ {valor_total:,.2f}"]], colWidths=[20 * mm, 30 * mm])
-    total_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.7, INK),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
-        ("ALIGN", (1, 0), (1, 0), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
-    wrapper = Table([[None, total_table]], colWidths=[120 * mm, 50 * mm])
-    story.append(wrapper)
-    story.append(Spacer(1, 14))
-
-    condicoes_titulo = ParagraphStyle("cond_titulo", parent=styles["Normal"], fontSize=9, fontName="Helvetica-Bold", textColor=INK)
-    cond_header = Table([[Paragraph("CONDIÇÕES GERAIS DE FORNECIMENTO", condicoes_titulo)]], colWidths=[170 * mm])
-    cond_header.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.8, INK),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
-    story.append(cond_header)
-    story.append(Spacer(1, 8))
-
-    story.append(Paragraph(
-        f"<b>Validade:</b> {orcamento.validade_dias} dias - A emissão desta proposta não garante a reserva dos itens ora cotados.",
-        body_style,
-    ))
     story.append(Spacer(1, 4))
-    story.append(Paragraph(f"<b>Condição de pagamento:</b> {orcamento.condicoes_pagamento or '—'}.", body_style))
-    story.append(Paragraph("<b>Impostos:</b> Inclusos, acima especificados.", body_style))
-    story.append(Paragraph("<b>Prazo de Entrega:</b> Conforme descrito.", body_style))
-    story.append(Spacer(1, 8))
-    story.append(Paragraph(
+
+    if ipi_repr is not None:
+        story.append(Paragraph(f"Valor do IPI: {ipi_repr:g}% (Incluso valor acima)", body_style))
+    if icms_repr is not None:
+        story.append(Paragraph(f"Valor do ICMS: {icms_repr:g}% (Incluso valor acima)", body_style))
+
+    # Condições comerciais — mesmo padrão do orçamento técnico
+    story.append(Paragraph("Condições Gerais de Fornecimento", section_style))
+    condicoes = [
+        f"Validade: {orcamento.validade_dias} dias - A emissão desta proposta não garante a reserva dos itens ora cotados.",
+        f"Condição de Pagamento: {orcamento.condicoes_pagamento or '—'}.",
+        "Impostos: Inclusos, acima especificados.",
+        "Prazo de Entrega: Conforme descrito.",
         "Entrega, instalação e treinamento feita por conta da Plusprint Automação.",
-        body_style,
-    ))
+    ]
+    for linha_texto in condicoes:
+        story.append(Paragraph(linha_texto, body_style))
 
     if orcamento.observacoes:
-        story.append(Spacer(1, 8))
+        story.append(Paragraph("Observações", section_style))
         story.append(Paragraph(orcamento.observacoes, body_style))
 
     doc.build(story)

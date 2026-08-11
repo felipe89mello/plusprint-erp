@@ -95,6 +95,7 @@ class OrdemServicoBase(BaseModel):
 
 class OrdemServicoCreate(OrdemServicoBase):
     data_abertura: Optional[datetime] = None  # se não informado, usa a data/hora atual
+    data_conclusao: Optional[datetime] = None
     itens_servico: list[ItemServicoOSCreate] = []
     equipamento_ids: list[int] = []
 

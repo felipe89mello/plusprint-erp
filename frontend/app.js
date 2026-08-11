@@ -10,8 +10,10 @@ const ENTITIES = {
   clientes: {
     title: "Clientes",
     endpoint: "/clientes/",
+    sort: compareNome,
+    showSeq: true,
+    filterEmpresa: true,
     columns: [
-      { key: "id", label: "ID", mono: true },
       { key: "nome", label: "Nome" },
       { key: "telefone", label: "Telefone" },
       { key: "email", label: "Email" },
@@ -50,8 +52,14 @@ const ENTITIES = {
     title: "Ordens de Serviço",
     endpoint: "/ordens-servico/",
     custom: true, // este módulo usa formulário próprio (openOrdemModal) — inclui peças utilizadas
+    sort: compareNumero,
+    filterEmpresa: true,
+    statusFilters: [
+      { value: "aberto", label: "Aberto" },
+      { value: "em_andamento", label: "Em andamento" },
+      { value: "concluido", label: "Concluído" },
+    ],
     columns: [
-      { key: "id", label: "ID", mono: true },
       { key: "numero", label: "Nº" },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
       { key: "status", label: "Status", badge: true },
@@ -71,8 +79,14 @@ const ENTITIES = {
     title: "Orçamentos",
     endpoint: "/orcamentos/",
     custom: true, // este módulo usa formulário próprio (openOrcamentoModal), não o motor genérico
+    sort: compareNumero,
+    filterEmpresa: true,
+    statusFilters: [
+      { value: "pendente", label: "Pendente" },
+      { value: "aprovado", label: "Aprovado" },
+      { value: "recusado", label: "Reprovado" },
+    ],
     columns: [
-      { key: "id", label: "ID", mono: true },
       { key: "numero", label: "Nº" },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
       { key: "tipo", label: "Tipo", tipoOrcamento: true },
@@ -107,6 +121,7 @@ const ENTITIES = {
   pecas: {
     title: "Peças / Estoque",
     endpoint: "/pecas/",
+    sort: compareNome,
     columns: [
       { key: "id", label: "ID", mono: true },
       { key: "nome", label: "Nome" },
@@ -357,6 +372,17 @@ async function renderFinanceiro() {
 // Renderização: Listagem genérica (Clientes, Equipamentos, ...)
 // ---------------------------------------------------------------
 
+function compareNome(a, b) {
+  return (a.nome || "").localeCompare(b.nome || "", "pt-BR", { sensitivity: "base" });
+}
+
+function compareNumero(a, b) {
+  if (!a.numero && !b.numero) return 0;
+  if (!a.numero) return 1; // sem número vai para o fim
+  if (!b.numero) return -1;
+  return a.numero.localeCompare(b.numero, undefined, { numeric: true, sensitivity: "base" });
+}
+
 async function preloadRelations(config) {
   // Garante que os dados de relação (ex: clientes, para exibir nome em vez de ID)
   // estejam no cache antes de desenhar a tabela.
@@ -366,8 +392,146 @@ async function preloadRelations(config) {
   for (const key of needed) {
     if (!cache[key]) {
       cache[key] = await apiGet(ENTITIES[key].endpoint);
+      if (ENTITIES[key].sort) cache[key].sort(ENTITIES[key].sort);
     }
   }
+}
+
+const filterState = {}; // por viewKey: { status: string|null, empresa: string }
+
+function nomeClienteDoItem(viewKey, item) {
+  if (viewKey === "clientes") return item.nome || "";
+  const cli = (cache.clientes || []).find((c) => c.id === item.cliente_id);
+  return cli ? cli.nome : "";
+}
+
+function applyFilters(viewKey, items) {
+  const state = filterState[viewKey] || {};
+  let filtrados = items;
+  if (state.status) filtrados = filtrados.filter((i) => i.status === state.status);
+  if (state.empresa) {
+    const termo = state.empresa.toLowerCase();
+    filtrados = filtrados.filter((i) => nomeClienteDoItem(viewKey, i).toLowerCase().includes(termo));
+  }
+  return filtrados;
+}
+
+function buildFilterBarHtml(viewKey, config) {
+  const state = filterState[viewKey];
+  const statusBtns = (config.statusFilters || [])
+    .map(
+      (s) =>
+        `<button type="button" class="filter-btn ${state.status === s.value ? "active" : ""}" data-filter-status="${s.value}">${s.label}</button>`
+    )
+    .join("");
+  const searchHtml = config.filterEmpresa
+    ? `<input type="text" id="filtro-empresa" class="filter-search" placeholder="Buscar por empresa..." value="${state.empresa || ""}">`
+    : "";
+  return `<div class="filter-bar">${statusBtns}${searchHtml}</div>`;
+}
+
+function wireFilterBar(viewKey) {
+  document.querySelectorAll("[data-filter-status]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const val = btn.dataset.filterStatus;
+      filterState[viewKey].status = filterState[viewKey].status === val ? null : val;
+      document.querySelectorAll("[data-filter-status]").forEach((b) => b.classList.toggle("active", b.dataset.filterStatus === filterState[viewKey].status));
+      renderTableInto(viewKey, cache[viewKey]);
+    });
+  });
+  const searchInput = document.getElementById("filtro-empresa");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      filterState[viewKey].empresa = searchInput.value;
+      renderTableInto(viewKey, cache[viewKey]);
+    });
+  }
+}
+
+function renderTableInto(viewKey, allItems) {
+  const config = ENTITIES[viewKey];
+  const container = document.getElementById("table-container");
+  const items = applyFilters(viewKey, allItems);
+
+  if (items.length === 0) {
+    container.innerHTML = `<div class="table-wrap"><div class="empty-state">Nenhum resultado encontrado.</div></div>`;
+    return;
+  }
+
+  const headerHtml = (config.showSeq ? `<th>#</th>` : "") + config.columns.map((c) => `<th>${c.label}</th>`).join("") + "<th></th>";
+
+  const rowsHtml = items
+    .map((item, index) => {
+      const seqCell = config.showSeq ? `<td class="mono">${index + 1}</td>` : "";
+      const cells = config.columns
+        .map((c) => {
+          let value = item[c.key];
+          if (c.relation) value = relationLabel(c.relation, value);
+          else if (c.money) value = formatMoney(value);
+          else if (c.date) value = formatDate(value);
+          else if (c.tipoOrcamento) value = formatTipoOrcamento(value);
+          else if (c.badge) return `<td><span class="badge status-${value}">${value}</span></td>`;
+          else if (value == null || value === "") value = "—";
+
+          const cls = c.mono ? "mono" : "";
+          const style = c.lowStock && item.quantidade_estoque < 5 ? 'style="color:var(--red);font-weight:600"' : "";
+          return `<td class="${cls}" ${style}>${value}</td>`;
+        })
+        .join("");
+      const pdfBtn =
+        viewKey === "orcamentos"
+          ? `<button class="btn btn-pdf" data-pdf="${item.id}">PDF</button>`
+          : viewKey === "ordens"
+          ? `<button class="btn btn-pdf" data-pdf-os="${item.id}">PDF</button>`
+          : "";
+      const osBtn =
+        viewKey === "orcamentos" && item.status === "aprovado"
+          ? `<button class="btn btn-os" data-gerar-os="${item.id}">Gerar OS</button>`
+          : "";
+      const rowAttr = viewKey === "ordens" ? `data-open-os="${item.id}"` : "";
+      return `<tr ${rowAttr}>${seqCell}${cells}<td class="row-actions">${pdfBtn}${osBtn}<button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
+    })
+    .join("");
+
+  container.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>${headerHtml}</tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  `;
+
+  container.querySelectorAll("[data-delete]").forEach((btn) => {
+    btn.addEventListener("click", () => handleDelete(viewKey, btn.dataset.delete));
+  });
+  container.querySelectorAll("[data-pdf]").forEach((btn) => {
+    btn.addEventListener("click", () => window.open(`${API_BASE}/orcamentos/${btn.dataset.pdf}/pdf`, "_blank"));
+  });
+  container.querySelectorAll("[data-pdf-os]").forEach((btn) => {
+    btn.addEventListener("click", () => window.open(`${API_BASE}/ordens-servico/${btn.dataset.pdfOs}/pdf`, "_blank"));
+  });
+  container.querySelectorAll("[data-gerar-os]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = items.find((i) => String(i.id) === btn.dataset.gerarOs);
+      handleGerarOS(item);
+    });
+  });
+  container.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = items.find((i) => String(i.id) === btn.dataset.edit);
+      if (viewKey === "orcamentos") openOrcamentoModal(item);
+      else if (viewKey === "ordens") openOrdemModal(item);
+      else openModal(viewKey, item);
+    });
+  });
+  container.querySelectorAll("[data-open-os]").forEach((tr) => {
+    tr.addEventListener("click", (ev) => {
+      if (ev.target.closest("button")) return; // não interfere nos botões da linha
+      const item = items.find((i) => String(i.id) === tr.dataset.openOs);
+      openOrdemModal(item);
+    });
+  });
 }
 
 async function renderList(viewKey) {
@@ -378,6 +542,7 @@ async function renderList(viewKey) {
   try {
     await preloadRelations(config);
     const items = await apiGet(config.endpoint);
+    if (config.sort) items.sort(config.sort);
     cache[viewKey] = items;
 
     if (items.length === 0) {
@@ -385,79 +550,13 @@ async function renderList(viewKey) {
       return;
     }
 
-    const headerHtml = config.columns.map((c) => `<th>${c.label}</th>`).join("") + "<th></th>";
+    if (!filterState[viewKey]) filterState[viewKey] = { status: null, empresa: "" };
+    const temFiltro = config.statusFilters || config.filterEmpresa;
 
-    const rowsHtml = items
-      .map((item) => {
-        const cells = config.columns
-          .map((c) => {
-            let value = item[c.key];
-            if (c.relation) value = relationLabel(c.relation, value);
-            else if (c.money) value = formatMoney(value);
-            else if (c.date) value = formatDate(value);
-            else if (c.tipoOrcamento) value = formatTipoOrcamento(value);
-            else if (c.badge) return `<td><span class="badge status-${value}">${value}</span></td>`;
-            else if (value == null || value === "") value = "—";
+    root.innerHTML = (temFiltro ? buildFilterBarHtml(viewKey, config) : "") + `<div id="table-container"></div>`;
+    if (temFiltro) wireFilterBar(viewKey);
 
-            const cls = c.mono ? "mono" : "";
-            const style = c.lowStock && item.quantidade_estoque < 5 ? 'style="color:var(--red);font-weight:600"' : "";
-            return `<td class="${cls}" ${style}>${value}</td>`;
-          })
-          .join("");
-        const pdfBtn =
-          viewKey === "orcamentos"
-            ? `<button class="btn btn-pdf" data-pdf="${item.id}">PDF</button>`
-            : viewKey === "ordens"
-            ? `<button class="btn btn-pdf" data-pdf-os="${item.id}">PDF</button>`
-            : "";
-        const osBtn =
-          viewKey === "orcamentos" && item.status === "aprovado"
-            ? `<button class="btn btn-os" data-gerar-os="${item.id}">Gerar OS</button>`
-            : "";
-        const rowAttr = viewKey === "ordens" ? `data-open-os="${item.id}"` : "";
-        return `<tr ${rowAttr}>${cells}<td class="row-actions">${pdfBtn}${osBtn}<button class="btn btn-edit" data-edit="${item.id}">Editar</button><button class="btn btn-danger" data-delete="${item.id}">Excluir</button></td></tr>`;
-      })
-      .join("");
-
-    root.innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead><tr>${headerHtml}</tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>
-    `;
-
-    root.querySelectorAll("[data-delete]").forEach((btn) => {
-      btn.addEventListener("click", () => handleDelete(viewKey, btn.dataset.delete));
-    });
-    root.querySelectorAll("[data-pdf]").forEach((btn) => {
-      btn.addEventListener("click", () => window.open(`${API_BASE}/orcamentos/${btn.dataset.pdf}/pdf`, "_blank"));
-    });
-    root.querySelectorAll("[data-pdf-os]").forEach((btn) => {
-      btn.addEventListener("click", () => window.open(`${API_BASE}/ordens-servico/${btn.dataset.pdfOs}/pdf`, "_blank"));
-    });
-    root.querySelectorAll("[data-gerar-os]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const item = items.find((i) => String(i.id) === btn.dataset.gerarOs);
-        handleGerarOS(item);
-      });
-    });
-    root.querySelectorAll("[data-edit]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const item = items.find((i) => String(i.id) === btn.dataset.edit);
-        if (viewKey === "orcamentos") openOrcamentoModal(item);
-        else if (viewKey === "ordens") openOrdemModal(item);
-        else openModal(viewKey, item);
-      });
-    });
-    root.querySelectorAll("[data-open-os]").forEach((tr) => {
-      tr.addEventListener("click", (ev) => {
-        if (ev.target.closest("button")) return; // não interfere nos botões da linha
-        const item = items.find((i) => String(i.id) === tr.dataset.openOs);
-        openOrdemModal(item);
-      });
-    });
+    renderTableInto(viewKey, items);
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar os dados. A API está rodando?</div>`;
   }
@@ -654,6 +753,10 @@ async function openOrcamentoModal(existingItem) {
 
   const tipoAtual = isEdit ? existingItem.tipo || "tecnico" : "tecnico";
 
+  // Cliente selecionado no momento — usado para filtrar o seletor de
+  // equipamentos, mostrando só os equipamentos daquele cliente.
+  let clienteIdAtual = isEdit ? existingItem.cliente_id : null;
+
   // Cada equipamento adicionado carrega seu próprio diagnóstico/solução —
   // controlado em memória enquanto o formulário está aberto, e lido do DOM
   // (cada card tem suas próprias textareas) só no momento de salvar.
@@ -667,6 +770,7 @@ async function openOrcamentoModal(existingItem) {
 
   const equipamentosPickerOptions = () =>
     (cache.equipamentos || [])
+      .filter((e) => !clienteIdAtual || e.cliente_id === clienteIdAtual)
       .filter((e) => !equipamentosSelecionados.some((s) => s.equipamento_id === e.id))
       .map((e) => `<option value="${e.id}">${labelForItem(e)}</option>`)
       .join("");
@@ -761,6 +865,11 @@ async function openOrcamentoModal(existingItem) {
     document.getElementById("itens-body").insertAdjacentHTML("beforeend", itemRowHtml());
     attachItemListeners(form);
     recalcularSubtotal(form);
+  });
+
+  document.querySelector('select[name="cliente_id"]').addEventListener("change", (ev) => {
+    clienteIdAtual = ev.target.value ? Number(ev.target.value) : null;
+    document.getElementById("equipamento-picker").innerHTML = equipamentosPickerOptions();
   });
 
   function toggleSecaoPorTipo() {
@@ -1033,6 +1142,7 @@ async function openOrdemModal(existingItem, prefillData = null) {
       .join("");
 
   const dataAberturaValor = isEdit && existingItem.data_abertura ? existingItem.data_abertura.slice(0, 10) : "";
+  const dataConclusaoValor = isEdit && existingItem.data_conclusao ? existingItem.data_conclusao.slice(0, 10) : "";
   const itensServicoExistentes = isEdit && existingItem.itens_servico && existingItem.itens_servico.length
     ? existingItem.itens_servico
     : [{}];
@@ -1064,6 +1174,11 @@ async function openOrdemModal(existingItem, prefillData = null) {
         <select name="orcamento_id"><option value="">— nenhum —</option>${orcamentosOptions}</select>
       </div>
       <div class="field"><label>Data de abertura</label><input type="date" name="data_abertura" value="${dataAberturaValor}" placeholder="hoje"></div>
+    </div>
+
+    <div class="field-row">
+      <div class="field"><label>Data de conclusão</label><input type="date" name="data_conclusao" value="${dataConclusaoValor}"></div>
+      <div></div>
     </div>
 
     <div class="field"><label>Descrição *</label><textarea name="descricao" required>${v("descricao")}</textarea></div>
@@ -1201,6 +1316,7 @@ async function openOrdemModal(existingItem, prefillData = null) {
       else data[k] = Number(data[k]);
     });
     if (data.data_abertura === "") delete data.data_abertura;
+    if (data.data_conclusao === "") delete data.data_conclusao;
     if (data.numero === "") delete data.numero;
 
     data.equipamento_ids = equipamentosOS.map((e) => e.id);

@@ -154,6 +154,53 @@ body {
   margin: 0;
 }
 
+/* ---------- Barra de filtros ---------- */
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filter-btn:hover { border-color: var(--ink-soft); color: var(--ink); }
+
+.filter-btn.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.filter-search {
+  margin-left: auto;
+  min-width: 220px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  background: var(--panel);
+}
+
+.filter-search:focus {
+  outline: none;
+  border-color: var(--ink-soft);
+}
+
 .btn {
   font-family: var(--font-body);
   font-weight: 600;

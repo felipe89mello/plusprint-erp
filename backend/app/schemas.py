@@ -215,6 +215,7 @@ class OrcamentoBase(BaseModel):
     responsabilidade_transporte: str = "Cliente"
     tecnico_responsavel: Optional[str] = None
     status: str = "pendente"
+    pago: bool = False
 
 
 class OrcamentoCreate(OrcamentoBase):
@@ -222,6 +223,7 @@ class OrcamentoCreate(OrcamentoBase):
     equipamentos: list[OrcamentoEquipamentoItem] = []
     itens_venda: list[ItemVendaEquipamentoCreate] = []
     data: Optional[datetime] = None  # se não informado, usa a data/hora atual (emissão)
+    data_pagamento: Optional[datetime] = None
 
 
 class OrcamentoUpdate(BaseModel):
@@ -240,12 +242,15 @@ class OrcamentoUpdate(BaseModel):
     equipamentos: Optional[list[OrcamentoEquipamentoItem]] = None
     itens_venda: Optional[list[ItemVendaEquipamentoCreate]] = None
     data: Optional[datetime] = None
+    pago: Optional[bool] = None
+    data_pagamento: Optional[datetime] = None
 
 
 class OrcamentoOut(OrcamentoBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     data: datetime
+    data_pagamento: Optional[datetime] = None
     itens: list[ItemOrcamentoOut] = []
     itens_venda: list[ItemVendaEquipamentoOut] = []
     valor_total: Decimal = Decimal("0")
@@ -256,7 +261,9 @@ class OrcamentoOut(OrcamentoBase):
         data = {c: getattr(orcamento, c) for c in OrcamentoBase.model_fields}
         data["id"] = orcamento.id
         data["data"] = orcamento.data
+        data["data_pagamento"] = orcamento.data_pagamento
         data["tipo"] = data.get("tipo") or "tecnico"  # registros antigos (antes do campo existir) ficam com NULL
+        data["pago"] = bool(data.get("pago"))  # idem — registros antigos ficam com NULL
         data["itens"] = [ItemOrcamentoOut.from_model(i) for i in orcamento.itens]
         data["itens_venda"] = [ItemVendaEquipamentoOut.from_model(i) for i in orcamento.itens_venda]
         valor_servicos = sum((i.quantidade * i.valor_unitario for i in orcamento.itens), Decimal("0"))
@@ -356,21 +363,83 @@ class ItemPecaOSOut(BaseModel):
     data_uso: datetime
 
 
-# ---------- Dashboard ----------
+# ---------- Dashboard (só operacional) ----------
 
 class DashboardOut(BaseModel):
     os_abertas: int
     os_em_andamento: int
     os_concluidas: int
-    faturamento_mes_atual: Decimal
     contratos_ativos: int
     pecas_com_estoque_baixo: list[PecaOut]
+
+
+# ---------- Despesa ----------
+
+class DespesaBase(BaseModel):
+    descricao: str
+    categoria: Optional[str] = None
+    valor: Decimal
+    data: date
+    observacoes: Optional[str] = None
+
+
+class DespesaCreate(DespesaBase):
+    pass
+
+
+class DespesaUpdate(BaseModel):
+    descricao: Optional[str] = None
+    categoria: Optional[str] = None
+    valor: Optional[Decimal] = None
+    data: Optional[date] = None
+    observacoes: Optional[str] = None
+
+
+class DespesaOut(DespesaBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+# ---------- Financeiro ----------
+
+class FinanceiroResumoOut(BaseModel):
+    faturamento_mes: Decimal
+    custo_pecas_mes: Decimal
+    despesas_mes: Decimal
+    liquido_mes: Decimal
+    faturamento_ano: Decimal
+    custo_pecas_ano: Decimal
+    despesas_ano: Decimal
+    liquido_ano: Decimal
     orcamentos_total: int
     orcamentos_pendentes: int
     orcamentos_aprovados: int
     orcamentos_recusados: int
-    custo_pecas_mes: Decimal
-    liquido_mes: Decimal
-    faturamento_ano: Decimal
-    custo_pecas_ano: Decimal
-    liquido_ano: Decimal
+
+
+class ContaReceberOut(BaseModel):
+    orcamento_id: int
+    numero: Optional[str] = None
+    cliente_nome: str
+    valor_total: Decimal
+    condicoes_pagamento: Optional[str] = None
+    data_referencia: Optional[date] = None  # base usada no cálculo (conclusão da OS ou emissão)
+    dias_prazo: Optional[int] = None
+    data_vencimento: Optional[date] = None
+    pago: bool
+    data_pagamento: Optional[datetime] = None
+    situacao: str  # pago | em_dia | vence_em_breve | atrasado | aguardando_conclusao
+
+
+class FaturamentoMensalPonto(BaseModel):
+    ano: int
+    mes: int
+    faturamento: Decimal
+    custo: Decimal
+    liquido: Decimal
+
+
+class ClienteRankingOut(BaseModel):
+    cliente_id: int
+    cliente_nome: str
+    faturamento_total: Decimal

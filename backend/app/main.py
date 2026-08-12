@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401  (garante que os modelos sejam registrados)
-from app.routers import clientes, equipamentos, ordens_servico, orcamentos, contratos, pecas, dashboard, orcamento_pdf, os_pdf
+from app.routers import clientes, equipamentos, ordens_servico, orcamentos, contratos, pecas, dashboard, orcamento_pdf, os_pdf, despesas, financeiro
 
 # A criação/alteração de tabelas agora é feita pelo Alembic (migrations/), não
 # mais automaticamente aqui — veja o README para o fluxo de migração.
@@ -25,6 +25,8 @@ app.include_router(orcamento_pdf.router)
 app.include_router(contratos.router)
 app.include_router(pecas.router)
 app.include_router(dashboard.router)
+app.include_router(despesas.router)
+app.include_router(financeiro.router)
 
 
 @app.get("/")

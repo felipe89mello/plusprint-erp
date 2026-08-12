@@ -299,6 +299,80 @@ body {
   margin: 0 0 12px;
 }
 
+/* ---------- Financeiro: gráfico e ranking ---------- */
+
+.chart-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 28px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-legend .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.ranking-list {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+
+.ranking-row {
+  display: grid;
+  grid-template-columns: 26px 140px 1fr 90px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+
+.ranking-row .pos { color: var(--ink-soft); font-family: var(--font-mono); font-size: 12px; }
+.ranking-row .nome { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ranking-row .valor { text-align: right; font-family: var(--font-mono); font-size: 12.5px; }
+
+.ranking-bar-track {
+  background: #F0F0EC;
+  border-radius: 6px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.ranking-bar-fill {
+  background: var(--amber);
+  height: 100%;
+  border-radius: 6px;
+}
+
+.btn-pagar {
+  background: transparent;
+  color: var(--green);
+  border-color: transparent;
+  font-size: 12px;
+  padding: 4px 8px;
+  font-weight: 700;
+}
+
+.btn-pagar:hover { text-decoration: underline; }
+
 /* ---------- Table ---------- */
 
 .table-wrap {
@@ -357,10 +431,10 @@ tbody tr[data-open-os] { cursor: pointer; }
   background: currentColor;
 }
 
-.badge.status-aberto, .badge.status-ativo, .badge.status-pendente { background: var(--amber-dim); color: #9A6A18; }
+.badge.status-aberto, .badge.status-ativo, .badge.status-pendente, .badge.status-aguardando_conclusao, .badge.status-vence_em_breve { background: var(--amber-dim); color: #9A6A18; }
 .badge.status-em_andamento { background: #E4EEF8; color: #2C5F8A; }
-.badge.status-concluido, .badge.status-aprovado { background: #E9F3EC; color: var(--green); }
-.badge.status-recusado, .badge.status-encerrado, .badge.status-suspenso { background: #FBEAE7; color: var(--red); }
+.badge.status-concluido, .badge.status-aprovado, .badge.status-pago, .badge.status-em_dia { background: #E9F3EC; color: var(--green); }
+.badge.status-recusado, .badge.status-encerrado, .badge.status-suspenso, .badge.status-atrasado { background: #FBEAE7; color: var(--red); }
 
 .empty-state {
   padding: 48px 20px;

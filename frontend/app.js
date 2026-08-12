@@ -142,6 +142,29 @@ const ENTITIES = {
       { name: "valor_unitario", label: "Valor de venda (R$)", type: "number", required: true },
     ],
   },
+
+  despesas: {
+    title: "Despesas",
+    endpoint: "/despesas/",
+    columns: [
+      { key: "data", label: "Data", date: true },
+      { key: "descricao", label: "Descrição" },
+      { key: "categoria", label: "Categoria" },
+      { key: "valor", label: "Valor", money: true },
+    ],
+    fields: [
+      { name: "descricao", label: "Descrição", type: "text", required: true },
+      {
+        name: "categoria",
+        label: "Categoria",
+        type: "select",
+        options: ["aluguel", "combustível", "salário", "imposto", "manutenção", "material de escritório", "outros"],
+      },
+      { name: "valor", label: "Valor (R$)", type: "number", required: true },
+      { name: "data", label: "Data", type: "date", required: true },
+      { name: "observacoes", label: "Observações", type: "textarea" },
+    ],
+  },
 };
 
 // Cache simples em memória, usado para preencher os <select> de relação
@@ -277,26 +300,6 @@ async function renderDashboard() {
         </div>
       </div>
 
-      <h3 class="panel-title">Orçamentos</h3>
-      <div class="metric-grid">
-        <div class="metric-card">
-          <div class="metric-label">Total</div>
-          <div class="metric-value">${d.orcamentos_total}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Pendentes</div>
-          <div class="metric-value">${d.orcamentos_pendentes}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Aprovados</div>
-          <div class="metric-value" style="color:var(--green)">${d.orcamentos_aprovados}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Recusados</div>
-          <div class="metric-value" style="color:var(--red)">${d.orcamentos_recusados}</div>
-        </div>
-      </div>
-
       <h3 class="panel-title">Peças com estoque baixo</h3>
       <div class="table-wrap">
         ${
@@ -324,26 +327,132 @@ async function renderDashboard() {
   }
 }
 
+const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const SITUACAO_LABEL = {
+  pago: "Pago",
+  em_dia: "Em dia",
+  vence_em_breve: "Vence em breve",
+  atrasado: "Atrasado",
+  aguardando_conclusao: "Aguardando conclusão",
+};
+
+function buildFaturamentoChartSvg(pontos) {
+  const largura = 760;
+  const altura = 200;
+  const padEsq = 46;
+  const padBaixo = 24;
+  const padTopo = 10;
+  const areaW = largura - padEsq - 10;
+  const areaH = altura - padTopo - padBaixo;
+
+  const maxValor = Math.max(1, ...pontos.map((p) => Math.max(Number(p.faturamento), Number(p.liquido))));
+  const passo = areaW / pontos.length;
+  const escala = (v) => (v / maxValor) * areaH;
+
+  const barras = pontos
+    .map((p, i) => {
+      const x = padEsq + i * passo;
+      const wBar = Math.min(22, passo * 0.32);
+      const hFat = escala(Number(p.faturamento));
+      const hLiq = escala(Number(p.liquido));
+      const yFat = padTopo + areaH - hFat;
+      const yLiq = padTopo + areaH - hLiq;
+      const label = MESES_ABREV[p.mes - 1];
+      return `
+        <rect x="${x + passo / 2 - wBar - 2}" y="${yFat}" width="${wBar}" height="${Math.max(hFat, 1)}" fill="var(--amber)" rx="2"></rect>
+        <rect x="${x + passo / 2 + 2}" y="${yLiq}" width="${wBar}" height="${Math.max(hLiq, 1)}" fill="var(--green)" rx="2"></rect>
+        <text x="${x + passo / 2}" y="${altura - 6}" font-size="9.5" text-anchor="middle" fill="#5B5F66">${label}</text>
+      `;
+    })
+    .join("");
+
+  const linhaBase = padTopo + areaH;
+
+  return `
+    <svg viewBox="0 0 ${largura} ${altura}" width="100%" style="max-width:100%;height:auto;font-family:var(--font-body)">
+      <line x1="${padEsq}" y1="${linhaBase}" x2="${largura - 10}" y2="${linhaBase}" stroke="#E3E2DD" stroke-width="1"></line>
+      <text x="4" y="${padTopo + 6}" font-size="9.5" fill="#5B5F66">${formatMoney(maxValor)}</text>
+      ${barras}
+    </svg>
+  `;
+}
+
+function buildRankingHtml(ranking) {
+  if (ranking.length === 0) return `<div class="empty-state">Nenhum faturamento realizado ainda.</div>`;
+  const max = Math.max(...ranking.map((r) => Number(r.faturamento_total)));
+  return ranking
+    .slice(0, 10)
+    .map(
+      (r, i) => `
+      <div class="ranking-row">
+        <span class="pos">${i + 1}º</span>
+        <span class="nome">${r.cliente_nome}</span>
+        <span class="ranking-bar-track"><span class="ranking-bar-fill" style="width:${(Number(r.faturamento_total) / max) * 100}%"></span></span>
+        <span class="valor">${formatMoney(r.faturamento_total)}</span>
+      </div>
+    `
+    )
+    .join("");
+}
+
+function buildContasReceberHtml(contas) {
+  if (contas.length === 0) return `<div class="empty-state">Nenhum orçamento aprovado no momento.</div>`;
+  const linhas = contas
+    .map((c) => {
+      const badge = `<span class="badge status-${c.situacao}">${SITUACAO_LABEL[c.situacao] || c.situacao}</span>`;
+      const venc = c.data_vencimento ? formatDate(c.data_vencimento) : "—";
+      const acao = c.pago ? "" : `<button class="btn btn-pagar" data-marcar-pago="${c.orcamento_id}">Marcar como pago</button>`;
+      return `<tr>
+        <td class="mono">${c.numero || "—"}</td>
+        <td>${c.cliente_nome}</td>
+        <td>${c.condicoes_pagamento || "—"}</td>
+        <td>${venc}</td>
+        <td class="mono">${formatMoney(c.valor_total)}</td>
+        <td>${badge}</td>
+        <td>${acao}</td>
+      </tr>`;
+    })
+    .join("");
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nº</th><th>Cliente</th><th>Condição</th><th>Vencimento</th><th>Valor</th><th>Situação</th><th></th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 async function renderFinanceiro() {
   const root = document.getElementById("view-root");
   root.innerHTML = `<div class="empty-state">Carregando indicadores...</div>`;
 
   try {
-    const d = await apiGet("/dashboard/");
+    const [resumo, contas, pontos, ranking] = await Promise.all([
+      apiGet("/financeiro/resumo"),
+      apiGet("/financeiro/contas-a-receber"),
+      apiGet("/financeiro/faturamento-mensal"),
+      apiGet("/financeiro/por-cliente"),
+    ]);
+
     root.innerHTML = `
       <h3 class="panel-title">Este mês</h3>
       <div class="metric-grid">
         <div class="metric-card">
           <div class="metric-label">Faturamento</div>
-          <div class="metric-value amber">${formatMoney(d.faturamento_mes_atual)}</div>
+          <div class="metric-value amber">${formatMoney(resumo.faturamento_mes)}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Custo de peças</div>
-          <div class="metric-value" style="color:var(--red)">${formatMoney(d.custo_pecas_mes)}</div>
+          <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.custo_pecas_mes)}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Despesas</div>
+          <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.despesas_mes)}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Líquido</div>
-          <div class="metric-value" style="color:var(--green)">${formatMoney(d.liquido_mes)}</div>
+          <div class="metric-value" style="color:var(--green)">${formatMoney(resumo.liquido_mes)}</div>
         </div>
       </div>
 
@@ -351,18 +460,49 @@ async function renderFinanceiro() {
       <div class="metric-grid">
         <div class="metric-card">
           <div class="metric-label">Faturamento</div>
-          <div class="metric-value amber">${formatMoney(d.faturamento_ano)}</div>
+          <div class="metric-value amber">${formatMoney(resumo.faturamento_ano)}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Custo de peças</div>
-          <div class="metric-value" style="color:var(--red)">${formatMoney(d.custo_pecas_ano)}</div>
+          <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.custo_pecas_ano)}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Despesas</div>
+          <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.despesas_ano)}</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Líquido</div>
-          <div class="metric-value" style="color:var(--green)">${formatMoney(d.liquido_ano)}</div>
+          <div class="metric-value" style="color:var(--green)">${formatMoney(resumo.liquido_ano)}</div>
         </div>
       </div>
+
+      <h3 class="panel-title">Faturamento x Líquido — últimos 12 meses</h3>
+      <div class="chart-card">
+        <div class="chart-legend">
+          <span><span class="dot" style="background:var(--amber)"></span> Faturamento</span>
+          <span><span class="dot" style="background:var(--green)"></span> Líquido</span>
+        </div>
+        ${buildFaturamentoChartSvg(pontos)}
+      </div>
+
+      <h3 class="panel-title">Faturamento por cliente</h3>
+      <div class="ranking-list">${buildRankingHtml(ranking)}</div>
+
+      <h3 class="panel-title" style="margin-top:28px">Contas a Receber</h3>
+      <div id="contas-a-receber-wrap">${buildContasReceberHtml(contas)}</div>
     `;
+
+    document.querySelectorAll("[data-marcar-pago]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await apiSend(`/orcamentos/${btn.dataset.marcarPago}`, "PUT", { pago: true });
+          showAlert("Orçamento marcado como pago.", "success");
+          renderFinanceiro();
+        } catch (e) {
+          showAlert(e.message);
+        }
+      });
+    });
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar os dados financeiros. A API está rodando?</div>`;
   }

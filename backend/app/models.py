@@ -96,6 +96,8 @@ class Orcamento(Base):
 
     status = Column(String(30), default="pendente")  # pendente | aprovado | recusado
     data = Column(DateTime, default=datetime.utcnow)
+    pago = Column(Boolean, default=False)
+    data_pagamento = Column(DateTime, nullable=True)
 
     cliente = relationship("Cliente", back_populates="orcamentos")
     itens_equipamento = relationship("OrcamentoEquipamento", back_populates="orcamento", cascade="all, delete-orphan")
@@ -220,3 +222,17 @@ class ItemServicoOS(Base):
     valor_unitario = Column(Numeric(10, 2), nullable=False)
 
     ordem_servico = relationship("OrdemServico", back_populates="itens_servico")
+
+
+class Despesa(Base):
+    """Despesa geral do negócio, sem ligação com peça ou OS — aluguel,
+    combustível, salário, imposto, etc. Entra no cálculo do líquido real."""
+
+    __tablename__ = "despesas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    descricao = Column(String(250), nullable=False)
+    categoria = Column(String(100), nullable=True)  # ex: aluguel, combustível, salário, imposto, outros
+    valor = Column(Numeric(10, 2), nullable=False)
+    data = Column(Date, nullable=False, default=datetime.utcnow)
+    observacoes = Column(Text, nullable=True)

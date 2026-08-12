@@ -443,7 +443,7 @@ async function renderFinanceiro() {
           <div class="metric-value amber">${formatMoney(resumo.faturamento_mes)}</div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Custo de peças</div>
+          <div class="metric-label">Custo de peças/produtos</div>
           <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.custo_pecas_mes)}</div>
         </div>
         <div class="metric-card">
@@ -463,7 +463,7 @@ async function renderFinanceiro() {
           <div class="metric-value amber">${formatMoney(resumo.faturamento_ano)}</div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Custo de peças</div>
+          <div class="metric-label">Custo de peças/produtos</div>
           <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.custo_pecas_ano)}</div>
         </div>
         <div class="metric-card">
@@ -1101,6 +1101,7 @@ async function openOrcamentoModal(existingItem) {
       item.ipi_percentual = card.querySelector('[data-field="ipi_percentual"]').value;
       item.icms_percentual = card.querySelector('[data-field="icms_percentual"]').value;
       item.preco_unitario = card.querySelector('[data-field="preco_unitario"]').value;
+      item.custo_unitario = card.querySelector('[data-field="custo_unitario"]').value;
     });
   }
 
@@ -1131,7 +1132,10 @@ async function openOrcamentoModal(existingItem) {
                 <div class="field"><label>IPI (%)</label><input type="number" step="0.01" data-field="ipi_percentual" value="${item.ipi_percentual ?? ""}"></div>
                 <div class="field"><label>ICMS (%)</label><input type="number" step="0.01" data-field="icms_percentual" value="${item.icms_percentual ?? ""}"></div>
               </div>
-              <div class="field"><label>Preço Unitário (R$) *</label><input type="number" step="0.01" data-field="preco_unitario" value="${item.preco_unitario ?? ""}"></div>
+              <div class="field-row">
+                <div class="field"><label>Preço Unitário (R$) *</label><input type="number" step="0.01" data-field="preco_unitario" value="${item.preco_unitario ?? ""}"></div>
+                <div class="field"><label>Custo unitário (R$) <span style="font-weight:400;color:var(--ink-soft)">— interno, não aparece no PDF</span></label><input type="number" step="0.01" data-field="custo_unitario" value="${item.custo_unitario ?? ""}"></div>
+              </div>
             </div>`
           )
           .join("")
@@ -1202,6 +1206,7 @@ async function openOrcamentoModal(existingItem) {
         ipi_percentual: i.ipi_percentual !== "" && i.ipi_percentual != null ? parseFloat(i.ipi_percentual) : null,
         icms_percentual: i.icms_percentual !== "" && i.icms_percentual != null ? parseFloat(i.icms_percentual) : null,
         preco_unitario: parseFloat(i.preco_unitario),
+        custo_unitario: i.custo_unitario !== "" && i.custo_unitario != null ? parseFloat(i.custo_unitario) : null,
       }));
 
     if (data.tipo === "tecnico" && data.itens.length === 0) {

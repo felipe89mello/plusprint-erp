@@ -177,6 +177,7 @@ class ItemVendaEquipamentoCreate(BaseModel):
     ipi_percentual: Optional[Decimal] = None
     icms_percentual: Optional[Decimal] = None
     preco_unitario: Decimal
+    custo_unitario: Optional[Decimal] = None
 
 
 class ItemVendaEquipamentoOut(ItemVendaEquipamentoCreate):
@@ -198,6 +199,7 @@ class ItemVendaEquipamentoOut(ItemVendaEquipamentoCreate):
             ipi_percentual=item.ipi_percentual,
             icms_percentual=item.icms_percentual,
             preco_unitario=item.preco_unitario,
+            custo_unitario=item.custo_unitario,
             valor_total=item.quantidade * item.preco_unitario,
         )
 

@@ -34,6 +34,7 @@ def _substituir_itens_venda(orcamento: models.Orcamento, itens: list[schemas.Ite
                 ipi_percentual=item.ipi_percentual,
                 icms_percentual=item.icms_percentual,
                 preco_unitario=item.preco_unitario,
+                custo_unitario=item.custo_unitario,
             )
         )
 

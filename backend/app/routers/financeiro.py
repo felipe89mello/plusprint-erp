@@ -20,8 +20,8 @@ def _dias_prazo(condicoes_pagamento: str | None) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def _faturamento_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
-    """Soma dos itens do orçamento vinculado a OS concluídas no período."""
+def _faturamento_tecnico_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
+    """Soma dos itens de orçamentos técnicos vinculados a OS concluídas no período."""
     query = (
         db.query(func.coalesce(func.sum(models.ItemOrcamento.quantidade * models.ItemOrcamento.valor_unitario), 0))
         .join(models.Orcamento, models.ItemOrcamento.orcamento_id == models.Orcamento.id)
@@ -33,6 +33,22 @@ def _faturamento_periodo(db: Session, ano: int, mes: int | None = None) -> Decim
     )
     if mes is not None:
         query = query.filter(extract("month", models.OrdemServico.data_conclusao) == mes)
+    return query.scalar()
+
+
+def _faturamento_venda_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
+    """Soma dos itens de orçamentos de venda de equipamento aprovados no período
+    (aqui a receita já é considerada realizada na aprovação, sem depender de OS)."""
+    query = (
+        db.query(func.coalesce(func.sum(models.ItemVendaEquipamento.quantidade * models.ItemVendaEquipamento.preco_unitario), 0))
+        .join(models.Orcamento, models.ItemVendaEquipamento.orcamento_id == models.Orcamento.id)
+        .filter(
+            models.Orcamento.status == "aprovado",
+            extract("year", models.Orcamento.data) == ano,
+        )
+    )
+    if mes is not None:
+        query = query.filter(extract("month", models.Orcamento.data) == mes)
     return query.scalar()
 
 
@@ -51,6 +67,22 @@ def _custo_pecas_periodo(db: Session, ano: int, mes: int | None = None) -> Decim
     return query.scalar()
 
 
+def _custo_vendas_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
+    """Soma do custo de compra dos equipamentos vendidos (orçamentos de venda
+    aprovados) no período — mesma janela usada para contar a receita da venda."""
+    query = (
+        db.query(func.coalesce(func.sum(models.ItemVendaEquipamento.quantidade * models.ItemVendaEquipamento.custo_unitario), 0))
+        .join(models.Orcamento, models.ItemVendaEquipamento.orcamento_id == models.Orcamento.id)
+        .filter(
+            models.Orcamento.status == "aprovado",
+            extract("year", models.Orcamento.data) == ano,
+        )
+    )
+    if mes is not None:
+        query = query.filter(extract("month", models.Orcamento.data) == mes)
+    return query.scalar()
+
+
 def _despesas_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
     query = db.query(func.coalesce(func.sum(models.Despesa.valor), 0)).filter(extract("year", models.Despesa.data) == ano)
     if mes is not None:
@@ -62,12 +94,12 @@ def _despesas_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
 def resumo_financeiro(db: Session = Depends(get_db)):
     agora = datetime.utcnow()
 
-    faturamento_mes = _faturamento_periodo(db, agora.year, agora.month)
-    custo_pecas_mes = _custo_pecas_periodo(db, agora.year, agora.month)
+    faturamento_mes = _faturamento_tecnico_periodo(db, agora.year, agora.month) + _faturamento_venda_periodo(db, agora.year, agora.month)
+    custo_pecas_mes = _custo_pecas_periodo(db, agora.year, agora.month) + _custo_vendas_periodo(db, agora.year, agora.month)
     despesas_mes = _despesas_periodo(db, agora.year, agora.month)
 
-    faturamento_ano = _faturamento_periodo(db, agora.year)
-    custo_pecas_ano = _custo_pecas_periodo(db, agora.year)
+    faturamento_ano = _faturamento_tecnico_periodo(db, agora.year) + _faturamento_venda_periodo(db, agora.year)
+    custo_pecas_ano = _custo_pecas_periodo(db, agora.year) + _custo_vendas_periodo(db, agora.year)
     despesas_ano = _despesas_periodo(db, agora.year)
 
     def contar_orcamentos(status: str | None = None) -> int:
@@ -170,8 +202,8 @@ def faturamento_mensal(db: Session = Depends(get_db)):
 
     pontos = []
     for a, m in periodos:
-        fat = _faturamento_periodo(db, a, m)
-        custo = _custo_pecas_periodo(db, a, m)
+        fat = _faturamento_tecnico_periodo(db, a, m) + _faturamento_venda_periodo(db, a, m)
+        custo = _custo_pecas_periodo(db, a, m) + _custo_vendas_periodo(db, a, m)
         pontos.append(schemas.FaturamentoMensalPonto(ano=a, mes=m, faturamento=fat, custo=custo, liquido=fat - custo))
     return pontos
 

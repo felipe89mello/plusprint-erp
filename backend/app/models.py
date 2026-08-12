@@ -157,6 +157,7 @@ class ItemVendaEquipamento(Base):
     ipi_percentual = Column(Numeric(5, 2), nullable=True)
     icms_percentual = Column(Numeric(5, 2), nullable=True)
     preco_unitario = Column(Numeric(10, 2), nullable=False)
+    custo_unitario = Column(Numeric(10, 2), nullable=True)  # quanto você pagou pela peça/equipamento (interno)
 
     orcamento = relationship("Orcamento", back_populates="itens_venda")
 

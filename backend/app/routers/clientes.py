@@ -46,5 +46,21 @@ def excluir_cliente(cliente_id: int, db: Session = Depends(get_db)):
     cliente = db.get(models.Cliente, cliente_id)
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
+
+    vinculos = []
+    if cliente.equipamentos:
+        vinculos.append(f"{len(cliente.equipamentos)} equipamento(s)")
+    if cliente.orcamentos:
+        vinculos.append(f"{len(cliente.orcamentos)} orçamento(s)")
+    if cliente.ordens_servico:
+        vinculos.append(f"{len(cliente.ordens_servico)} OS")
+    if cliente.contratos:
+        vinculos.append(f"{len(cliente.contratos)} contrato(s)")
+    if vinculos:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Não é possível excluir: cliente tem {', '.join(vinculos)} vinculado(s). Mova ou exclua esses registros primeiro.",
+        )
+
     db.delete(cliente)
     db.commit()

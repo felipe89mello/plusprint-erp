@@ -453,6 +453,7 @@ class OrcamentoDetalheMensalOut(BaseModel):
     cliente_nome: str
     tipo: str  # tecnico | venda_equipamento
     valor: Decimal
+    custo: Optional[Decimal] = None  # só preenchido para venda_equipamento (custo pago no equipamento)
 
 
 class PecaDetalheMensalOut(BaseModel):

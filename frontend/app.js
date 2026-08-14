@@ -531,16 +531,20 @@ function buildDetalheMensalHtml(detalhe) {
     detalhe.orcamentos.length === 0
       ? `<div class="empty-state">Nenhum orçamento faturado neste mês.</div>`
       : `<div class="table-wrap"><table>
-          <thead><tr><th>Nº</th><th>Cliente</th><th>Tipo</th><th>Valor</th></tr></thead>
+          <thead><tr><th>Nº</th><th>Cliente</th><th>Tipo</th><th>Valor</th><th>Custo</th><th>Margem</th></tr></thead>
           <tbody>${detalhe.orcamentos
-            .map(
-              (o) => `<tr>
+            .map((o) => {
+              const temCusto = o.tipo === "venda_equipamento" && o.custo != null;
+              const margem = temCusto ? Number(o.valor) - Number(o.custo) : null;
+              return `<tr>
                 <td class="mono">${o.numero || "—"}</td>
                 <td>${o.cliente_nome}</td>
                 <td>${o.tipo === "venda_equipamento" ? "Venda de equipamento" : "Técnico"}</td>
                 <td class="mono">${formatMoney(o.valor)}</td>
-              </tr>`
-            )
+                <td class="mono">${temCusto ? formatMoney(o.custo) : "—"}</td>
+                <td class="mono">${temCusto ? formatMoney(margem) : "—"}</td>
+              </tr>`;
+            })
             .join("")}</tbody>
         </table></div>`;
 

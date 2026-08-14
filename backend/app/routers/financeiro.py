@@ -241,11 +241,13 @@ def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
                 )
             )
 
-    # Venda de equipamento: orçamentos aprovados no período.
+    # Venda de equipamento: orçamentos aprovados no período (valor de venda e
+    # custo pago no equipamento, lado a lado).
     vendas = (
         db.query(
             models.Orcamento,
             func.coalesce(func.sum(models.ItemVendaEquipamento.quantidade * models.ItemVendaEquipamento.preco_unitario), 0).label("valor"),
+            func.coalesce(func.sum(models.ItemVendaEquipamento.quantidade * models.ItemVendaEquipamento.custo_unitario), 0).label("custo"),
         )
         .join(models.ItemVendaEquipamento, models.ItemVendaEquipamento.orcamento_id == models.Orcamento.id)
         .filter(
@@ -256,11 +258,16 @@ def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
         .group_by(models.Orcamento.id)
         .all()
     )
-    for o, valor in vendas:
+    for o, valor, custo in vendas:
         if valor > 0:
             orcamentos.append(
                 schemas.OrcamentoDetalheMensalOut(
-                    orcamento_id=o.id, numero=o.numero, cliente_nome=o.cliente.nome, tipo="venda_equipamento", valor=valor
+                    orcamento_id=o.id,
+                    numero=o.numero,
+                    cliente_nome=o.cliente.nome,
+                    tipo="venda_equipamento",
+                    valor=valor,
+                    custo=custo,
                 )
             )
 

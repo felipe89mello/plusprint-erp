@@ -1,6 +1,95 @@
 const API_BASE = "/api";
 
 // ---------------------------------------------------------------
+// Autenticação
+// ---------------------------------------------------------------
+
+let authToken = localStorage.getItem("plusprint_token") || null;
+
+function getAuthHeaders() {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
+
+function showLogin(mensagemErro) {
+  document.getElementById("app-root").classList.add("hidden");
+  document.getElementById("login-overlay").classList.remove("hidden");
+  const erroEl = document.getElementById("login-erro");
+  if (mensagemErro) {
+    erroEl.textContent = mensagemErro;
+    erroEl.classList.remove("hidden");
+  } else {
+    erroEl.classList.add("hidden");
+  }
+  document.getElementById("login-senha").value = "";
+  document.getElementById("login-email").focus();
+}
+
+function showApp(nomeUsuario) {
+  document.getElementById("login-overlay").classList.add("hidden");
+  document.getElementById("app-root").classList.remove("hidden");
+  const el = document.getElementById("usuario-logado");
+  if (el) el.textContent = nomeUsuario || "";
+  iniciarApp();
+}
+
+function logout() {
+  authToken = null;
+  localStorage.removeItem("plusprint_token");
+  showLogin();
+}
+
+async function tentarLogin(email, senha) {
+  const res = await fetch(API_BASE + "/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, senha }),
+  });
+  if (!res.ok) {
+    const detalhe = await res.json().catch(() => ({}));
+    throw new Error(detalhe.detail || "Não foi possível entrar.");
+  }
+  const dados = await res.json();
+  authToken = dados.access_token;
+  localStorage.setItem("plusprint_token", authToken);
+  return dados;
+}
+
+async function verificarSessao() {
+  if (!authToken) {
+    showLogin();
+    return;
+  }
+  try {
+    const res = await fetch(API_BASE + "/auth/me", { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error();
+    const usuario = await res.json();
+    showApp(usuario.nome);
+  } catch {
+    authToken = null;
+    localStorage.removeItem("plusprint_token");
+    showLogin();
+  }
+}
+
+document.getElementById("login-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const email = document.getElementById("login-email").value.trim();
+  const senha = document.getElementById("login-senha").value;
+  const btn = document.getElementById("login-submit");
+  btn.disabled = true;
+  btn.textContent = "Entrando...";
+  try {
+    const dados = await tentarLogin(email, senha);
+    showApp(dados.nome);
+  } catch (e) {
+    showLogin(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Entrar";
+  }
+});
+
+// ---------------------------------------------------------------
 // Configuração de cada módulo: de onde vem o dado e como exibir/editar.
 // Isso evita repetir a lógica de tabela/formulário 7 vezes — um único
 // motor genérico (renderList, openModal) lê essa configuração.
@@ -179,7 +268,11 @@ let currentView = "dashboard";
 // ---------------------------------------------------------------
 
 async function apiGet(path) {
-  const res = await fetch(API_BASE + path);
+  const res = await fetch(API_BASE + path, { headers: getAuthHeaders() });
+  if (res.status === 401) {
+    logout();
+    throw new Error("Sessão expirada. Faça login novamente.");
+  }
   if (!res.ok) throw new Error(`Erro ${res.status} ao buscar ${path}`);
   return res.json();
 }
@@ -187,9 +280,13 @@ async function apiGet(path) {
 async function apiSend(path, method, body) {
   const res = await fetch(API_BASE + path, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(body),
   });
+  if (res.status === 401) {
+    logout();
+    throw new Error("Sessão expirada. Faça login novamente.");
+  }
   if (!res.ok) {
     const detalhe = await res.json().catch(() => ({}));
     throw new Error(detalhe.detail || `Erro ${res.status}`);
@@ -198,8 +295,29 @@ async function apiSend(path, method, body) {
 }
 
 async function apiDelete(path) {
-  const res = await fetch(API_BASE + path, { method: "DELETE" });
+  const res = await fetch(API_BASE + path, { method: "DELETE", headers: getAuthHeaders() });
+  if (res.status === 401) {
+    logout();
+    throw new Error("Sessão expirada. Faça login novamente.");
+  }
   if (!res.ok) throw new Error(`Erro ${res.status} ao excluir`);
+}
+
+async function abrirPdf(url) {
+  try {
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (res.status === 401) {
+      logout();
+      return;
+    }
+    if (!res.ok) throw new Error("Não foi possível gerar o PDF.");
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, "_blank");
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (e) {
+    showAlert(e.message);
+  }
 }
 
 // ---------------------------------------------------------------
@@ -810,10 +928,10 @@ function renderTableInto(viewKey, allItems) {
     btn.addEventListener("click", () => handleDelete(viewKey, btn.dataset.delete));
   });
   container.querySelectorAll("[data-pdf]").forEach((btn) => {
-    btn.addEventListener("click", () => window.open(`${API_BASE}/orcamentos/${btn.dataset.pdf}/pdf`, "_blank"));
+    btn.addEventListener("click", () => abrirPdf(`${API_BASE}/orcamentos/${btn.dataset.pdf}/pdf`));
   });
   container.querySelectorAll("[data-pdf-os]").forEach((btn) => {
-    btn.addEventListener("click", () => window.open(`${API_BASE}/ordens-servico/${btn.dataset.pdfOs}/pdf`, "_blank"));
+    btn.addEventListener("click", () => abrirPdf(`${API_BASE}/ordens-servico/${btn.dataset.pdfOs}/pdf`));
   });
   container.querySelectorAll("[data-gerar-os]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1718,6 +1836,16 @@ document.getElementById("modal-overlay").addEventListener("click", (ev) => {
   if (ev.target.id === "modal-overlay") closeModal();
 });
 
-checkApiStatus();
-setInterval(checkApiStatus, 15000);
-switchView("dashboard");
+const btnLogout = document.getElementById("btn-logout");
+if (btnLogout) btnLogout.addEventListener("click", logout);
+
+let appIniciado = false;
+function iniciarApp() {
+  if (appIniciado) return; // evita duplicar o polling da API se logar de novo na mesma aba
+  appIniciado = true;
+  checkApiStatus();
+  setInterval(checkApiStatus, 15000);
+  switchView("dashboard");
+}
+
+verificarSessao();

@@ -237,3 +237,18 @@ class Despesa(Base):
     valor = Column(Numeric(10, 2), nullable=False)
     data = Column(Date, nullable=False, default=datetime.utcnow)
     observacoes = Column(Text, nullable=True)
+
+
+class Usuario(Base):
+    """Conta de acesso ao ERP. Sem cadastro público — usuários são criados
+    via script (app/create_user.py), rodado direto no servidor."""
+
+    __tablename__ = "usuarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(150), nullable=False)
+    email = Column(String(150), nullable=False, unique=True, index=True)
+    senha_hash = Column(String(255), nullable=False)
+    senha_salt = Column(String(64), nullable=False)
+    ativo = Column(Boolean, default=True, nullable=False)
+    criado_em = Column(DateTime, default=datetime.utcnow)

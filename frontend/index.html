@@ -10,7 +10,19 @@
 </head>
 <body>
 
-<div class="app">
+<div class="login-overlay hidden" id="login-overlay">
+  <form class="login-box" id="login-form">
+    <img class="login-logo" src="assets/logo.png" alt="Plusprint">
+    <h1>Plusprint ERP</h1>
+    <p class="login-sub">Entre com sua conta pra continuar</p>
+    <input type="email" id="login-email" placeholder="E-mail" autocomplete="username" required>
+    <input type="password" id="login-senha" placeholder="Senha" autocomplete="current-password" required>
+    <div id="login-erro" class="login-erro hidden"></div>
+    <button type="submit" class="btn btn-primary" id="login-submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app hidden" id="app-root">
   <aside class="sidebar">
     <div class="brand">
       <img class="brand-mark" src="assets/logo.png" alt="Plusprint">
@@ -54,6 +66,10 @@
       <span id="api-status" class="api-status">
         <span class="light"></span> verificando API...
       </span>
+      <div class="sidebar-user">
+        <span id="usuario-logado"></span>
+        <button type="button" id="btn-logout">Sair</button>
+      </div>
     </div>
   </aside>
 

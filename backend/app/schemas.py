@@ -477,3 +477,24 @@ class DetalheMensalOut(BaseModel):
     orcamentos: list[OrcamentoDetalheMensalOut]
     pecas: list[PecaDetalheMensalOut]
     despesas: list[DespesaDetalheMensalOut]
+
+
+class LoginIn(BaseModel):
+    email: str
+    senha: str
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    nome: str
+    email: str
+
+
+class UsuarioOut(BaseModel):
+    id: int
+    nome: str
+    email: str
+    ativo: bool
+
+    model_config = ConfigDict(from_attributes=True)

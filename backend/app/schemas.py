@@ -352,6 +352,8 @@ class ItemPecaOSCreate(BaseModel):
     ordem_servico_id: int
     peca_id: int
     quantidade_usada: int
+    valor_unitario: Optional[Decimal] = None  # preço de venda dessa vez; se omitido, usa o do catálogo
+    valor_compra: Optional[Decimal] = None  # custo pago dessa vez; se omitido, usa o do catálogo
 
 
 class ItemPecaOSOut(BaseModel):

@@ -1626,11 +1626,14 @@ async function openOrdemModal(existingItem, prefillData = null) {
 
     <label class="field-label-block">Peças utilizadas</label>
     <div id="pecas-ja-registradas"></div>
-    <div class="picker-row">
+    <div class="picker-row" style="flex-wrap:wrap;gap:8px">
       <select id="peca-picker">${pecasPickerOptions()}</select>
-      <input type="number" id="peca-qtd" min="1" step="1" value="1" style="width:80px">
+      <input type="number" id="peca-qtd" min="1" step="1" value="1" style="width:70px" title="Quantidade">
+      <input type="number" id="peca-venda" min="0" step="0.01" placeholder="Venda (R$)" style="width:110px" title="Preço de venda nesta OS">
+      <input type="number" id="peca-custo" min="0" step="0.01" placeholder="Custo (R$)" style="width:110px" title="Quanto você pagou nesta OS">
       <button type="button" class="btn" id="btn-add-peca">+ Adicionar</button>
     </div>
+    <p style="font-size:12px;color:var(--ink-soft);margin:2px 0 0">Venda e custo já vêm preenchidos com o padrão da peça, mas dá pra ajustar pra esse lançamento específico.</p>
     <div id="pecas-novas-list"></div>
 
     <div class="modal-actions">
@@ -1709,7 +1712,7 @@ async function openOrdemModal(existingItem, prefillData = null) {
       ? pecasNovas
           .map(
             (p, idx) =>
-              `<span class="chip">${p.quantidade}x ${p.nome}<button type="button" data-remove-peca-nova="${idx}">×</button></span>`
+              `<span class="chip">${p.quantidade}x ${p.nome} — venda ${formatMoney(p.valor_unitario)} / custo ${formatMoney(p.valor_compra)}<button type="button" data-remove-peca-nova="${idx}">×</button></span>`
           )
           .join("")
       : "";
@@ -1721,16 +1724,30 @@ async function openOrdemModal(existingItem, prefillData = null) {
     });
   }
 
+  function preencherPadraoPeca() {
+    const picker = document.getElementById("peca-picker");
+    const peca = (cache.pecas || []).find((p) => p.id === Number(picker.value));
+    document.getElementById("peca-venda").value = peca ? Number(peca.valor_unitario).toFixed(2) : "";
+    document.getElementById("peca-custo").value = peca && peca.valor_compra != null ? Number(peca.valor_compra).toFixed(2) : "";
+  }
+  document.getElementById("peca-picker").addEventListener("change", preencherPadraoPeca);
+  preencherPadraoPeca();
+
   document.getElementById("btn-add-peca").addEventListener("click", () => {
     const picker = document.getElementById("peca-picker");
     const qtdInput = document.getElementById("peca-qtd");
+    const vendaInput = document.getElementById("peca-venda");
+    const custoInput = document.getElementById("peca-custo");
     if (!picker.value) return;
     const qtd = Number(qtdInput.value) || 1;
     const peca = (cache.pecas || []).find((p) => p.id === Number(picker.value));
     if (!peca) return;
-    pecasNovas.push({ peca_id: peca.id, nome: peca.nome, quantidade: qtd });
+    const valor_unitario = vendaInput.value !== "" ? Number(vendaInput.value) : Number(peca.valor_unitario);
+    const valor_compra = custoInput.value !== "" ? Number(custoInput.value) : Number(peca.valor_compra || 0);
+    pecasNovas.push({ peca_id: peca.id, nome: peca.nome, quantidade: qtd, valor_unitario, valor_compra });
     qtdInput.value = 1;
     renderPecasNovas();
+    preencherPadraoPeca();
   });
 
   form.onsubmit = async (ev) => {
@@ -1777,6 +1794,8 @@ async function openOrdemModal(existingItem, prefillData = null) {
             ordem_servico_id: osId,
             peca_id: p.peca_id,
             quantidade_usada: p.quantidade,
+            valor_unitario: p.valor_unitario,
+            valor_compra: p.valor_compra,
           });
         } catch (e) {
           erros.push(`${p.nome}: ${e.message}`);

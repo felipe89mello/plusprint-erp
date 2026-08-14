@@ -497,18 +497,22 @@ async function renderFinanceiro() {
     }
     const pontos = await apiGet(`/financeiro/faturamento-mensal?ano=${financeiroAnoSelecionado}`);
 
+    const agora = new Date();
+    const anoAtual = agora.getFullYear();
+    const mesAtual = agora.getMonth() + 1;
+
     root.innerHTML = `
       <h3 class="panel-title">Este mês</h3>
       <div class="metric-grid">
-        <div class="metric-card">
+        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}" data-detalhe-mes="${mesAtual}">
           <div class="metric-label">Faturamento</div>
           <div class="metric-value amber">${formatMoney(resumo.faturamento_mes)}</div>
         </div>
-        <div class="metric-card">
+        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}" data-detalhe-mes="${mesAtual}">
           <div class="metric-label">Custo de peças/produtos</div>
           <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.custo_pecas_mes)}</div>
         </div>
-        <div class="metric-card">
+        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}" data-detalhe-mes="${mesAtual}">
           <div class="metric-label">Despesas</div>
           <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.despesas_mes)}</div>
         </div>
@@ -520,15 +524,15 @@ async function renderFinanceiro() {
 
       <h3 class="panel-title">Este ano</h3>
       <div class="metric-grid">
-        <div class="metric-card">
+        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}">
           <div class="metric-label">Faturamento</div>
           <div class="metric-value amber">${formatMoney(resumo.faturamento_ano)}</div>
         </div>
-        <div class="metric-card">
+        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}">
           <div class="metric-label">Custo de peças/produtos</div>
           <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.custo_pecas_ano)}</div>
         </div>
-        <div class="metric-card">
+        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}">
           <div class="metric-label">Despesas</div>
           <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.despesas_ano)}</div>
         </div>
@@ -556,6 +560,14 @@ async function renderFinanceiro() {
         } catch (e) {
           showAlert(e.message);
         }
+      });
+    });
+
+    document.querySelectorAll("[data-detalhe-ano]").forEach((card) => {
+      card.addEventListener("click", () => {
+        const ano = Number(card.dataset.detalheAno);
+        const mes = card.dataset.detalheMes ? Number(card.dataset.detalheMes) : null;
+        openFaturamentoMesModal(ano, mes);
       });
     });
 
@@ -639,15 +651,16 @@ function buildDetalheMensalHtml(detalhe) {
   `;
 }
 
-async function openFaturamentoMesModal(ano, mes) {
-  document.getElementById("modal-title").textContent = `${MESES_ABREV[mes - 1]}/${ano} — Detalhe`;
+async function openFaturamentoMesModal(ano, mes = null) {
+  document.getElementById("modal-title").textContent = mes ? `${MESES_ABREV[mes - 1]}/${ano} — Detalhe` : `${ano} — Detalhe do ano`;
   document.getElementById("modal").classList.add("modal-lg");
   const form = document.getElementById("modal-form");
   form.innerHTML = `<div class="empty-state">Carregando...</div>`;
   document.getElementById("modal-overlay").classList.remove("hidden");
 
   try {
-    const detalhe = await apiGet(`/financeiro/detalhe-mensal?ano=${ano}&mes=${mes}`);
+    const qs = mes ? `ano=${ano}&mes=${mes}` : `ano=${ano}`;
+    const detalhe = await apiGet(`/financeiro/detalhe-mensal?${qs}`);
     form.innerHTML =
       buildDetalheMensalHtml(detalhe) +
       `<div class="modal-actions">
@@ -655,7 +668,7 @@ async function openFaturamentoMesModal(ano, mes) {
       </div>`;
     document.getElementById("modal-cancel").addEventListener("click", closeModal);
   } catch (e) {
-    form.innerHTML = `<div class="empty-state">Não foi possível carregar o detalhe deste mês.</div>`;
+    form.innerHTML = `<div class="empty-state">Não foi possível carregar o detalhe deste período.</div>`;
   }
 }
 

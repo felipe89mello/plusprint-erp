@@ -473,7 +473,7 @@ class DespesaDetalheMensalOut(BaseModel):
 
 class DetalheMensalOut(BaseModel):
     ano: int
-    mes: int
+    mes: Optional[int] = None
     orcamentos: list[OrcamentoDetalheMensalOut]
     pecas: list[PecaDetalheMensalOut]
     despesas: list[DespesaDetalheMensalOut]

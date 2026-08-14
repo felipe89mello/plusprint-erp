@@ -221,16 +221,17 @@ def faturamento_mensal(ano: int | None = None, db: Session = Depends(get_db)):
 
 
 @router.get("/detalhe-mensal", response_model=schemas.DetalheMensalOut)
-def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
-    """Detalhamento por trás dos totais de um mês específico: orçamentos que
+def detalhe_mensal(ano: int, mes: int | None = None, db: Session = Depends(get_db)):
+    """Detalhamento por trás dos totais de um período: orçamentos que
     compuseram o faturamento, peças usadas e despesas lançadas — usado no
-    modal de detalhe do gráfico Faturamento x Líquido."""
+    modal de detalhe do gráfico Faturamento x Líquido e dos cards do
+    dashboard. Se `mes` não for informado, agrega o ano inteiro."""
 
     orcamentos: list[schemas.OrcamentoDetalheMensalOut] = []
 
     # Técnico: orçamentos com ao menos uma OS concluída no período (mesma
     # regra usada em _faturamento_tecnico_periodo, mas agrupado por orçamento).
-    tecnicos = (
+    tecnicos_query = (
         db.query(
             models.Orcamento,
             func.coalesce(func.sum(models.ItemOrcamento.quantidade * models.ItemOrcamento.valor_unitario), 0).label("valor"),
@@ -240,12 +241,11 @@ def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
         .filter(
             models.OrdemServico.status == "concluido",
             extract("year", models.OrdemServico.data_conclusao) == ano,
-            extract("month", models.OrdemServico.data_conclusao) == mes,
         )
-        .group_by(models.Orcamento.id)
-        .all()
     )
-    for o, valor in tecnicos:
+    if mes is not None:
+        tecnicos_query = tecnicos_query.filter(extract("month", models.OrdemServico.data_conclusao) == mes)
+    for o, valor in tecnicos_query.group_by(models.Orcamento.id).all():
         if valor > 0:
             orcamentos.append(
                 schemas.OrcamentoDetalheMensalOut(
@@ -255,7 +255,7 @@ def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
 
     # Venda de equipamento: orçamentos aprovados no período (valor de venda e
     # custo pago no equipamento, lado a lado).
-    vendas = (
+    vendas_query = (
         db.query(
             models.Orcamento,
             func.coalesce(func.sum(models.ItemVendaEquipamento.quantidade * models.ItemVendaEquipamento.preco_unitario), 0).label("valor"),
@@ -265,12 +265,11 @@ def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
         .filter(
             models.Orcamento.status == "aprovado",
             extract("year", models.Orcamento.data) == ano,
-            extract("month", models.Orcamento.data) == mes,
         )
-        .group_by(models.Orcamento.id)
-        .all()
     )
-    for o, valor, custo in vendas:
+    if mes is not None:
+        vendas_query = vendas_query.filter(extract("month", models.Orcamento.data) == mes)
+    for o, valor, custo in vendas_query.group_by(models.Orcamento.id).all():
         if valor > 0:
             orcamentos.append(
                 schemas.OrcamentoDetalheMensalOut(
@@ -286,7 +285,7 @@ def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
     orcamentos.sort(key=lambda r: r.valor, reverse=True)
 
     # Peças usadas em OS concluídas no período, agrupadas por peça.
-    pecas_query = (
+    pecas_base_query = (
         db.query(
             models.Peca.id,
             models.Peca.nome,
@@ -298,24 +297,23 @@ def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
         .filter(
             models.OrdemServico.status == "concluido",
             extract("year", models.OrdemServico.data_conclusao) == ano,
-            extract("month", models.OrdemServico.data_conclusao) == mes,
         )
-        .group_by(models.Peca.id, models.Peca.nome)
-        .order_by(func.sum(models.ItemPecaOS.quantidade_usada * models.ItemPecaOS.custo_unitario_na_epoca).desc())
-        .all()
     )
+    if mes is not None:
+        pecas_base_query = pecas_base_query.filter(extract("month", models.OrdemServico.data_conclusao) == mes)
+    pecas_query = pecas_base_query.group_by(models.Peca.id, models.Peca.nome).order_by(
+        func.sum(models.ItemPecaOS.quantidade_usada * models.ItemPecaOS.custo_unitario_na_epoca).desc()
+    ).all()
     pecas = [
         schemas.PecaDetalheMensalOut(peca_id=pid, peca_nome=nome, quantidade=int(qtd), custo_total=custo)
         for pid, nome, qtd, custo in pecas_query
     ]
 
     # Despesas lançadas no período.
-    despesas_query = (
-        db.query(models.Despesa)
-        .filter(extract("year", models.Despesa.data) == ano, extract("month", models.Despesa.data) == mes)
-        .order_by(models.Despesa.data.asc())
-        .all()
-    )
+    despesas_base_query = db.query(models.Despesa).filter(extract("year", models.Despesa.data) == ano)
+    if mes is not None:
+        despesas_base_query = despesas_base_query.filter(extract("month", models.Despesa.data) == mes)
+    despesas_query = despesas_base_query.order_by(models.Despesa.data.asc()).all()
     despesas = [
         schemas.DespesaDetalheMensalOut(despesa_id=d.id, descricao=d.descricao, categoria=d.categoria, valor=d.valor, data=d.data)
         for d in despesas_query

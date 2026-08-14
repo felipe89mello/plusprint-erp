@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = "/api";
 
 // ---------------------------------------------------------------
 // Configuração de cada módulo: de onde vem o dado e como exibir/editar.

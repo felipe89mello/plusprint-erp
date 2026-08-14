@@ -208,6 +208,103 @@ def faturamento_mensal(db: Session = Depends(get_db)):
     return pontos
 
 
+@router.get("/detalhe-mensal", response_model=schemas.DetalheMensalOut)
+def detalhe_mensal(ano: int, mes: int, db: Session = Depends(get_db)):
+    """Detalhamento por trás dos totais de um mês específico: orçamentos que
+    compuseram o faturamento, peças usadas e despesas lançadas — usado no
+    modal de detalhe do gráfico Faturamento x Líquido."""
+
+    orcamentos: list[schemas.OrcamentoDetalheMensalOut] = []
+
+    # Técnico: orçamentos com ao menos uma OS concluída no período (mesma
+    # regra usada em _faturamento_tecnico_periodo, mas agrupado por orçamento).
+    tecnicos = (
+        db.query(
+            models.Orcamento,
+            func.coalesce(func.sum(models.ItemOrcamento.quantidade * models.ItemOrcamento.valor_unitario), 0).label("valor"),
+        )
+        .join(models.ItemOrcamento, models.ItemOrcamento.orcamento_id == models.Orcamento.id)
+        .join(models.OrdemServico, models.OrdemServico.orcamento_id == models.Orcamento.id)
+        .filter(
+            models.OrdemServico.status == "concluido",
+            extract("year", models.OrdemServico.data_conclusao) == ano,
+            extract("month", models.OrdemServico.data_conclusao) == mes,
+        )
+        .group_by(models.Orcamento.id)
+        .all()
+    )
+    for o, valor in tecnicos:
+        if valor > 0:
+            orcamentos.append(
+                schemas.OrcamentoDetalheMensalOut(
+                    orcamento_id=o.id, numero=o.numero, cliente_nome=o.cliente.nome, tipo="tecnico", valor=valor
+                )
+            )
+
+    # Venda de equipamento: orçamentos aprovados no período.
+    vendas = (
+        db.query(
+            models.Orcamento,
+            func.coalesce(func.sum(models.ItemVendaEquipamento.quantidade * models.ItemVendaEquipamento.preco_unitario), 0).label("valor"),
+        )
+        .join(models.ItemVendaEquipamento, models.ItemVendaEquipamento.orcamento_id == models.Orcamento.id)
+        .filter(
+            models.Orcamento.status == "aprovado",
+            extract("year", models.Orcamento.data) == ano,
+            extract("month", models.Orcamento.data) == mes,
+        )
+        .group_by(models.Orcamento.id)
+        .all()
+    )
+    for o, valor in vendas:
+        if valor > 0:
+            orcamentos.append(
+                schemas.OrcamentoDetalheMensalOut(
+                    orcamento_id=o.id, numero=o.numero, cliente_nome=o.cliente.nome, tipo="venda_equipamento", valor=valor
+                )
+            )
+
+    orcamentos.sort(key=lambda r: r.valor, reverse=True)
+
+    # Peças usadas em OS concluídas no período, agrupadas por peça.
+    pecas_query = (
+        db.query(
+            models.Peca.id,
+            models.Peca.nome,
+            func.sum(models.ItemPecaOS.quantidade_usada).label("quantidade"),
+            func.sum(models.ItemPecaOS.quantidade_usada * models.ItemPecaOS.custo_unitario_na_epoca).label("custo_total"),
+        )
+        .join(models.ItemPecaOS, models.ItemPecaOS.peca_id == models.Peca.id)
+        .join(models.OrdemServico, models.ItemPecaOS.ordem_servico_id == models.OrdemServico.id)
+        .filter(
+            models.OrdemServico.status == "concluido",
+            extract("year", models.OrdemServico.data_conclusao) == ano,
+            extract("month", models.OrdemServico.data_conclusao) == mes,
+        )
+        .group_by(models.Peca.id, models.Peca.nome)
+        .order_by(func.sum(models.ItemPecaOS.quantidade_usada * models.ItemPecaOS.custo_unitario_na_epoca).desc())
+        .all()
+    )
+    pecas = [
+        schemas.PecaDetalheMensalOut(peca_id=pid, peca_nome=nome, quantidade=int(qtd), custo_total=custo)
+        for pid, nome, qtd, custo in pecas_query
+    ]
+
+    # Despesas lançadas no período.
+    despesas_query = (
+        db.query(models.Despesa)
+        .filter(extract("year", models.Despesa.data) == ano, extract("month", models.Despesa.data) == mes)
+        .order_by(models.Despesa.data.asc())
+        .all()
+    )
+    despesas = [
+        schemas.DespesaDetalheMensalOut(despesa_id=d.id, descricao=d.descricao, categoria=d.categoria, valor=d.valor, data=d.data)
+        for d in despesas_query
+    ]
+
+    return schemas.DetalheMensalOut(ano=ano, mes=mes, orcamentos=orcamentos, pecas=pecas, despesas=despesas)
+
+
 @router.get("/por-cliente", response_model=list[schemas.ClienteRankingOut])
 def por_cliente(db: Session = Depends(get_db)):
     """Ranking de faturamento por cliente — só conta o que já foi

@@ -445,3 +445,34 @@ class ClienteRankingOut(BaseModel):
     cliente_id: int
     cliente_nome: str
     faturamento_total: Decimal
+
+
+class OrcamentoDetalheMensalOut(BaseModel):
+    orcamento_id: int
+    numero: Optional[str] = None
+    cliente_nome: str
+    tipo: str  # tecnico | venda_equipamento
+    valor: Decimal
+
+
+class PecaDetalheMensalOut(BaseModel):
+    peca_id: int
+    peca_nome: str
+    quantidade: int
+    custo_total: Decimal
+
+
+class DespesaDetalheMensalOut(BaseModel):
+    despesa_id: int
+    descricao: str
+    categoria: Optional[str] = None
+    valor: Decimal
+    data: date
+
+
+class DetalheMensalOut(BaseModel):
+    ano: int
+    mes: int
+    orcamentos: list[OrcamentoDetalheMensalOut]
+    pecas: list[PecaDetalheMensalOut]
+    despesas: list[DespesaDetalheMensalOut]

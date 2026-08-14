@@ -359,9 +359,12 @@ function buildFaturamentoChartSvg(pontos) {
       const yLiq = padTopo + areaH - hLiq;
       const label = MESES_ABREV[p.mes - 1];
       return `
-        <rect x="${x + passo / 2 - wBar - 2}" y="${yFat}" width="${wBar}" height="${Math.max(hFat, 1)}" fill="var(--amber)" rx="2"></rect>
-        <rect x="${x + passo / 2 + 2}" y="${yLiq}" width="${wBar}" height="${Math.max(hLiq, 1)}" fill="var(--green)" rx="2"></rect>
-        <text x="${x + passo / 2}" y="${altura - 6}" font-size="9.5" text-anchor="middle" fill="#5B5F66">${label}</text>
+        <g class="chart-bar-group" data-ano="${p.ano}" data-mes="${p.mes}" style="cursor:pointer">
+          <rect x="${x}" y="${padTopo}" width="${passo}" height="${areaH}" fill="transparent"></rect>
+          <rect x="${x + passo / 2 - wBar - 2}" y="${yFat}" width="${wBar}" height="${Math.max(hFat, 1)}" fill="var(--amber)" rx="2"></rect>
+          <rect x="${x + passo / 2 + 2}" y="${yLiq}" width="${wBar}" height="${Math.max(hLiq, 1)}" fill="var(--green)" rx="2"></rect>
+          <text x="${x + passo / 2}" y="${altura - 6}" font-size="9.5" text-anchor="middle" fill="#5B5F66">${label}</text>
+        </g>
       `;
     })
     .join("");
@@ -481,6 +484,7 @@ async function renderFinanceiro() {
         <div class="chart-legend">
           <span><span class="dot" style="background:var(--amber)"></span> Faturamento</span>
           <span><span class="dot" style="background:var(--green)"></span> Líquido</span>
+          <span style="margin-left:auto;color:#9A9A93;font-size:12.5px">Clique num mês para ver o detalhe</span>
         </div>
         ${buildFaturamentoChartSvg(pontos)}
       </div>
@@ -503,8 +507,104 @@ async function renderFinanceiro() {
         }
       });
     });
+
+    document.querySelectorAll(".chart-bar-group").forEach((g) => {
+      g.addEventListener("click", () => {
+        openFaturamentoMesModal(Number(g.dataset.ano), Number(g.dataset.mes));
+      });
+    });
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar os dados financeiros. A API está rodando?</div>`;
+  }
+}
+
+// ---------------------------------------------------------------
+// Modal de detalhe mensal (clique numa barra do gráfico Financeiro)
+// ---------------------------------------------------------------
+
+function buildDetalheMensalHtml(detalhe) {
+  const totalOrcamentos = detalhe.orcamentos.reduce((s, o) => s + Number(o.valor), 0);
+  const totalPecas = detalhe.pecas.reduce((s, p) => s + Number(p.custo_total), 0);
+  const totalDespesas = detalhe.despesas.reduce((s, d) => s + Number(d.valor), 0);
+
+  const orcamentosHtml =
+    detalhe.orcamentos.length === 0
+      ? `<div class="empty-state">Nenhum orçamento faturado neste mês.</div>`
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>Nº</th><th>Cliente</th><th>Tipo</th><th>Valor</th></tr></thead>
+          <tbody>${detalhe.orcamentos
+            .map(
+              (o) => `<tr>
+                <td class="mono">${o.numero || "—"}</td>
+                <td>${o.cliente_nome}</td>
+                <td>${o.tipo === "venda_equipamento" ? "Venda de equipamento" : "Técnico"}</td>
+                <td class="mono">${formatMoney(o.valor)}</td>
+              </tr>`
+            )
+            .join("")}</tbody>
+        </table></div>`;
+
+  const pecasHtml =
+    detalhe.pecas.length === 0
+      ? `<div class="empty-state">Nenhuma peça usada neste mês.</div>`
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>Peça</th><th>Qtde</th><th>Custo</th></tr></thead>
+          <tbody>${detalhe.pecas
+            .map(
+              (p) => `<tr>
+                <td>${p.peca_nome}</td>
+                <td class="mono">${p.quantidade}</td>
+                <td class="mono">${formatMoney(p.custo_total)}</td>
+              </tr>`
+            )
+            .join("")}</tbody>
+        </table></div>`;
+
+  const despesasHtml =
+    detalhe.despesas.length === 0
+      ? `<div class="empty-state">Nenhuma despesa lançada neste mês.</div>`
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead>
+          <tbody>${detalhe.despesas
+            .map(
+              (d) => `<tr>
+                <td>${d.descricao}</td>
+                <td>${d.categoria || "—"}</td>
+                <td class="mono">${formatMoney(d.valor)}</td>
+              </tr>`
+            )
+            .join("")}</tbody>
+        </table></div>`;
+
+  return `
+    <h3 class="panel-title" style="margin-top:0">Orçamentos faturados <span class="mono" style="font-weight:400;color:#5B5F66">— ${formatMoney(totalOrcamentos)}</span></h3>
+    ${orcamentosHtml}
+
+    <h3 class="panel-title" style="margin-top:22px">Peças usadas <span class="mono" style="font-weight:400;color:#5B5F66">— ${formatMoney(totalPecas)}</span></h3>
+    ${pecasHtml}
+
+    <h3 class="panel-title" style="margin-top:22px">Despesas <span class="mono" style="font-weight:400;color:#5B5F66">— ${formatMoney(totalDespesas)}</span></h3>
+    ${despesasHtml}
+  `;
+}
+
+async function openFaturamentoMesModal(ano, mes) {
+  document.getElementById("modal-title").textContent = `${MESES_ABREV[mes - 1]}/${ano} — Detalhe`;
+  document.getElementById("modal").classList.add("modal-lg");
+  const form = document.getElementById("modal-form");
+  form.innerHTML = `<div class="empty-state">Carregando...</div>`;
+  document.getElementById("modal-overlay").classList.remove("hidden");
+
+  try {
+    const detalhe = await apiGet(`/financeiro/detalhe-mensal?ano=${ano}&mes=${mes}`);
+    form.innerHTML =
+      buildDetalheMensalHtml(detalhe) +
+      `<div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="modal-cancel">Fechar</button>
+      </div>`;
+    document.getElementById("modal-cancel").addEventListener("click", closeModal);
+  } catch (e) {
+    form.innerHTML = `<div class="empty-state">Não foi possível carregar o detalhe deste mês.</div>`;
   }
 }
 

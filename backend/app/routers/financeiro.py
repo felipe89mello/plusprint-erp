@@ -186,25 +186,37 @@ def contas_a_receber(db: Session = Depends(get_db)):
     return resultado
 
 
+@router.get("/anos-disponiveis", response_model=list[int])
+def anos_disponiveis(db: Session = Depends(get_db)):
+    """Anos que têm algum dado financeiro (OS concluída, orçamento aprovado
+    ou despesa lançada), sempre incluindo o ano atual — usado para montar os
+    botões de ano do gráfico Faturamento x Líquido."""
+    anos = set()
+    for (a,) in db.query(extract("year", models.OrdemServico.data_conclusao)).filter(models.OrdemServico.status == "concluido").distinct():
+        if a is not None:
+            anos.add(int(a))
+    for (a,) in db.query(extract("year", models.Orcamento.data)).filter(models.Orcamento.status == "aprovado").distinct():
+        if a is not None:
+            anos.add(int(a))
+    for (a,) in db.query(extract("year", models.Despesa.data)).distinct():
+        if a is not None:
+            anos.add(int(a))
+    anos.add(datetime.utcnow().year)
+    return sorted(anos)
+
+
 @router.get("/faturamento-mensal", response_model=list[schemas.FaturamentoMensalPonto])
-def faturamento_mensal(db: Session = Depends(get_db)):
-    """Últimos 12 meses (incluindo o atual) de faturamento/custo/líquido."""
-    agora = datetime.utcnow()
-    periodos = []
-    ano, mes = agora.year, agora.month
-    for i in range(11, -1, -1):
-        m = mes - i
-        a = ano
-        while m <= 0:
-            m += 12
-            a -= 1
-        periodos.append((a, m))
+def faturamento_mensal(ano: int | None = None, db: Session = Depends(get_db)):
+    """Os 12 meses (Jan-Dez) de faturamento/custo/líquido do ano informado
+    (padrão: ano atual)."""
+    if ano is None:
+        ano = datetime.utcnow().year
 
     pontos = []
-    for a, m in periodos:
-        fat = _faturamento_tecnico_periodo(db, a, m) + _faturamento_venda_periodo(db, a, m)
-        custo = _custo_pecas_periodo(db, a, m) + _custo_vendas_periodo(db, a, m)
-        pontos.append(schemas.FaturamentoMensalPonto(ano=a, mes=m, faturamento=fat, custo=custo, liquido=fat - custo))
+    for m in range(1, 13):
+        fat = _faturamento_tecnico_periodo(db, ano, m) + _faturamento_venda_periodo(db, ano, m)
+        custo = _custo_pecas_periodo(db, ano, m) + _custo_vendas_periodo(db, ano, m)
+        pontos.append(schemas.FaturamentoMensalPonto(ano=ano, mes=m, faturamento=fat, custo=custo, liquido=fat - custo))
     return pontos
 
 

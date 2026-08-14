@@ -328,6 +328,60 @@ async function renderDashboard() {
 }
 
 const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+let financeiroAnoSelecionado = null;
+
+function buildFaturamentoPanelHtml(anos, anoSelecionado, pontos) {
+  const botoesAno = anos
+    .map(
+      (a) =>
+        `<button type="button" class="btn ${a === anoSelecionado ? "btn-primary" : ""}" style="padding:6px 14px;font-size:12.5px" data-ano-faturamento="${a}">${a}</button>`
+    )
+    .join("");
+
+  return `
+    <div class="panel-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span>Faturamento x Líquido</span>
+      <span style="display:flex;gap:6px">${botoesAno}</span>
+    </div>
+    <div class="chart-card">
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--amber)"></span> Faturamento</span>
+        <span><span class="dot" style="background:var(--green)"></span> Líquido</span>
+        <span style="margin-left:auto;color:#9A9A93;font-size:12.5px">Clique num mês para ver o detalhe</span>
+      </div>
+      ${buildFaturamentoChartSvg(pontos)}
+    </div>
+  `;
+}
+
+async function selecionarAnoFaturamento(ano) {
+  financeiroAnoSelecionado = ano;
+  const wrap = document.getElementById("faturamento-chart-wrap");
+  if (!wrap) return;
+  wrap.innerHTML = `<div class="empty-state">Carregando...</div>`;
+  try {
+    const [anos, pontos] = await Promise.all([
+      apiGet("/financeiro/anos-disponiveis"),
+      apiGet(`/financeiro/faturamento-mensal?ano=${ano}`),
+    ]);
+    wrap.innerHTML = buildFaturamentoPanelHtml(anos, ano, pontos);
+    attachFaturamentoPanelListeners();
+  } catch (e) {
+    wrap.innerHTML = `<div class="empty-state">Não foi possível carregar o gráfico.</div>`;
+  }
+}
+
+function attachFaturamentoPanelListeners() {
+  document.querySelectorAll("[data-ano-faturamento]").forEach((btn) => {
+    btn.addEventListener("click", () => selecionarAnoFaturamento(Number(btn.dataset.anoFaturamento)));
+  });
+  document.querySelectorAll(".chart-bar-group").forEach((g) => {
+    g.addEventListener("click", () => {
+      openFaturamentoMesModal(Number(g.dataset.ano), Number(g.dataset.mes));
+    });
+  });
+}
 const SITUACAO_LABEL = {
   pago: "Pago",
   em_dia: "Em dia",
@@ -431,12 +485,17 @@ async function renderFinanceiro() {
   root.innerHTML = `<div class="empty-state">Carregando indicadores...</div>`;
 
   try {
-    const [resumo, contas, pontos, ranking] = await Promise.all([
+    const [resumo, contas, anos, ranking] = await Promise.all([
       apiGet("/financeiro/resumo"),
       apiGet("/financeiro/contas-a-receber"),
-      apiGet("/financeiro/faturamento-mensal"),
+      apiGet("/financeiro/anos-disponiveis"),
       apiGet("/financeiro/por-cliente"),
     ]);
+
+    if (financeiroAnoSelecionado === null || !anos.includes(financeiroAnoSelecionado)) {
+      financeiroAnoSelecionado = anos[anos.length - 1];
+    }
+    const pontos = await apiGet(`/financeiro/faturamento-mensal?ano=${financeiroAnoSelecionado}`);
 
     root.innerHTML = `
       <h3 class="panel-title">Este mês</h3>
@@ -479,15 +538,7 @@ async function renderFinanceiro() {
         </div>
       </div>
 
-      <h3 class="panel-title">Faturamento x Líquido — últimos 12 meses</h3>
-      <div class="chart-card">
-        <div class="chart-legend">
-          <span><span class="dot" style="background:var(--amber)"></span> Faturamento</span>
-          <span><span class="dot" style="background:var(--green)"></span> Líquido</span>
-          <span style="margin-left:auto;color:#9A9A93;font-size:12.5px">Clique num mês para ver o detalhe</span>
-        </div>
-        ${buildFaturamentoChartSvg(pontos)}
-      </div>
+      <div id="faturamento-chart-wrap">${buildFaturamentoPanelHtml(anos, financeiroAnoSelecionado, pontos)}</div>
 
       <h3 class="panel-title">Faturamento por cliente</h3>
       <div class="ranking-list">${buildRankingHtml(ranking)}</div>
@@ -508,11 +559,7 @@ async function renderFinanceiro() {
       });
     });
 
-    document.querySelectorAll(".chart-bar-group").forEach((g) => {
-      g.addEventListener("click", () => {
-        openFaturamentoMesModal(Number(g.dataset.ano), Number(g.dataset.mes));
-      });
-    });
+    attachFaturamentoPanelListeners();
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar os dados financeiros. A API está rodando?</div>`;
   }

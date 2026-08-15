@@ -785,8 +785,26 @@ async function renderFinanceiro() {
 
 function buildDetalheMensalHtml(detalhe) {
   const totalOrcamentos = detalhe.orcamentos.reduce((s, o) => s + Number(o.valor), 0);
+  const totalCustoVendas = detalhe.orcamentos.reduce(
+    (s, o) => s + (o.tipo === "venda_equipamento" && o.custo != null ? Number(o.custo) : 0),
+    0
+  );
   const totalPecas = detalhe.pecas.reduce((s, p) => s + Number(p.custo_total), 0);
   const totalDespesas = detalhe.despesas.reduce((s, d) => s + Number(d.valor), 0);
+  const liquido = totalOrcamentos - totalCustoVendas - totalPecas - totalDespesas;
+
+  const resumoHtml = `
+    <div class="metric-grid" style="margin-bottom:24px">
+      <div class="metric-card">
+        <div class="metric-label">Faturamento</div>
+        <div class="metric-value amber">${formatMoney(totalOrcamentos)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Líquido</div>
+        <div class="metric-value" style="color:var(--green)">${formatMoney(liquido)}</div>
+      </div>
+    </div>
+  `;
 
   const orcamentosHtml =
     detalhe.orcamentos.length === 0
@@ -842,6 +860,8 @@ function buildDetalheMensalHtml(detalhe) {
         </table></div>`;
 
   return `
+    ${resumoHtml}
+
     <h3 class="panel-title" style="margin-top:0">Orçamentos faturados <span class="mono" style="font-weight:400;color:#5B5F66">— ${formatMoney(totalOrcamentos)}</span></h3>
     ${orcamentosHtml}
 

@@ -598,6 +598,40 @@ const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Se
 
 let financeiroAnoSelecionado = null;
 
+function buildEsteAnoCardsHtml(anos, anoSelecionado, resumo) {
+  const botoesAno = anos
+    .map(
+      (a) =>
+        `<button type="button" class="btn ${a === anoSelecionado ? "btn-primary" : ""}" style="padding:6px 14px;font-size:12.5px" data-ano-resumo="${a}">${a}</button>`
+    )
+    .join("");
+
+  return `
+    <div class="panel-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span>Este ano</span>
+      <span style="display:flex;gap:6px">${botoesAno}</span>
+    </div>
+    <div class="metric-grid">
+      <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoSelecionado}">
+        <div class="metric-label">Faturamento</div>
+        <div class="metric-value amber">${formatMoney(resumo.faturamento_ano)}</div>
+      </div>
+      <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoSelecionado}">
+        <div class="metric-label">Custo de peças/produtos</div>
+        <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.custo_pecas_ano)}</div>
+      </div>
+      <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoSelecionado}">
+        <div class="metric-label">Despesas</div>
+        <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.despesas_ano)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Líquido</div>
+        <div class="metric-value" style="color:var(--green)">${formatMoney(resumo.liquido_ano)}</div>
+      </div>
+    </div>
+  `;
+}
+
 function buildFaturamentoPanelHtml(anos, anoSelecionado, pontos) {
   const botoesAno = anos
     .map(
@@ -624,29 +658,37 @@ function buildFaturamentoPanelHtml(anos, anoSelecionado, pontos) {
 
 async function selecionarAnoFaturamento(ano) {
   financeiroAnoSelecionado = ano;
-  const wrap = document.getElementById("faturamento-chart-wrap");
-  if (!wrap) return;
-  wrap.innerHTML = `<div class="empty-state">Carregando...</div>`;
+  const wrapGrafico = document.getElementById("faturamento-chart-wrap");
+  const wrapCards = document.getElementById("financeiro-ano-cards-wrap");
+  if (wrapGrafico) wrapGrafico.innerHTML = `<div class="empty-state">Carregando...</div>`;
+  if (wrapCards) wrapCards.innerHTML = `<div class="empty-state">Carregando...</div>`;
   try {
-    const [anos, pontos] = await Promise.all([
+    const [anos, pontos, resumo] = await Promise.all([
       apiGet("/financeiro/anos-disponiveis"),
       apiGet(`/financeiro/faturamento-mensal?ano=${ano}`),
+      apiGet(`/financeiro/resumo?ano=${ano}`),
     ]);
-    wrap.innerHTML = buildFaturamentoPanelHtml(anos, ano, pontos);
+    if (wrapGrafico) wrapGrafico.innerHTML = buildFaturamentoPanelHtml(anos, ano, pontos);
+    if (wrapCards) wrapCards.innerHTML = buildEsteAnoCardsHtml(anos, ano, resumo);
     attachFaturamentoPanelListeners();
   } catch (e) {
-    wrap.innerHTML = `<div class="empty-state">Não foi possível carregar o gráfico.</div>`;
+    if (wrapGrafico) wrapGrafico.innerHTML = `<div class="empty-state">Não foi possível carregar o gráfico.</div>`;
+    if (wrapCards) wrapCards.innerHTML = `<div class="empty-state">Não foi possível carregar os dados.</div>`;
   }
 }
 
 function attachFaturamentoPanelListeners() {
-  document.querySelectorAll("[data-ano-faturamento]").forEach((btn) => {
-    btn.addEventListener("click", () => selecionarAnoFaturamento(Number(btn.dataset.anoFaturamento)));
+  document.querySelectorAll("[data-ano-faturamento], [data-ano-resumo]").forEach((btn) => {
+    const ano = Number(btn.dataset.anoFaturamento ?? btn.dataset.anoResumo);
+    btn.addEventListener("click", () => selecionarAnoFaturamento(ano));
   });
   document.querySelectorAll(".chart-bar-group").forEach((g) => {
     g.addEventListener("click", () => {
       openFaturamentoMesModal(Number(g.dataset.ano), Number(g.dataset.mes));
     });
+  });
+  document.querySelectorAll("#financeiro-ano-cards-wrap [data-detalhe-ano]").forEach((card) => {
+    card.addEventListener("click", () => openFaturamentoMesModal(Number(card.dataset.detalheAno)));
   });
 }
 const SITUACAO_LABEL = {
@@ -752,8 +794,7 @@ async function renderFinanceiro() {
   root.innerHTML = `<div class="empty-state">Carregando indicadores...</div>`;
 
   try {
-    const [resumo, contas, anos, ranking] = await Promise.all([
-      apiGet("/financeiro/resumo"),
+    const [contas, anos, ranking] = await Promise.all([
       apiGet("/financeiro/contas-a-receber"),
       apiGet("/financeiro/anos-disponiveis"),
       apiGet("/financeiro/por-cliente"),
@@ -762,7 +803,10 @@ async function renderFinanceiro() {
     if (financeiroAnoSelecionado === null || !anos.includes(financeiroAnoSelecionado)) {
       financeiroAnoSelecionado = anos[anos.length - 1];
     }
-    const pontos = await apiGet(`/financeiro/faturamento-mensal?ano=${financeiroAnoSelecionado}`);
+    const [resumo, pontos] = await Promise.all([
+      apiGet(`/financeiro/resumo?ano=${financeiroAnoSelecionado}`),
+      apiGet(`/financeiro/faturamento-mensal?ano=${financeiroAnoSelecionado}`),
+    ]);
 
     const agora = new Date();
     const anoAtual = agora.getFullYear();
@@ -770,7 +814,7 @@ async function renderFinanceiro() {
 
     root.innerHTML = `
       <h3 class="panel-title">Este mês</h3>
-      <div class="metric-grid">
+      <div class="metric-grid" id="financeiro-mes-cards-wrap">
         <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}" data-detalhe-mes="${mesAtual}">
           <div class="metric-label">Faturamento</div>
           <div class="metric-value amber">${formatMoney(resumo.faturamento_mes)}</div>
@@ -789,25 +833,7 @@ async function renderFinanceiro() {
         </div>
       </div>
 
-      <h3 class="panel-title">Este ano</h3>
-      <div class="metric-grid">
-        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}">
-          <div class="metric-label">Faturamento</div>
-          <div class="metric-value amber">${formatMoney(resumo.faturamento_ano)}</div>
-        </div>
-        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}">
-          <div class="metric-label">Custo de peças/produtos</div>
-          <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.custo_pecas_ano)}</div>
-        </div>
-        <div class="metric-card metric-card-clickable" data-detalhe-ano="${anoAtual}">
-          <div class="metric-label">Despesas</div>
-          <div class="metric-value" style="color:var(--red)">${formatMoney(resumo.despesas_ano)}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Líquido</div>
-          <div class="metric-value" style="color:var(--green)">${formatMoney(resumo.liquido_ano)}</div>
-        </div>
-      </div>
+      <div id="financeiro-ano-cards-wrap">${buildEsteAnoCardsHtml(anos, financeiroAnoSelecionado, resumo)}</div>
 
       <div id="faturamento-chart-wrap">${buildFaturamentoPanelHtml(anos, financeiroAnoSelecionado, pontos)}</div>
 
@@ -830,7 +856,7 @@ async function renderFinanceiro() {
       });
     });
 
-    document.querySelectorAll("[data-detalhe-ano]").forEach((card) => {
+    document.querySelectorAll("#financeiro-mes-cards-wrap [data-detalhe-ano]").forEach((card) => {
       card.addEventListener("click", () => {
         const ano = Number(card.dataset.detalheAno);
         const mes = card.dataset.detalheMes ? Number(card.dataset.detalheMes) : null;

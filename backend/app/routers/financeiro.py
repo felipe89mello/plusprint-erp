@@ -91,16 +91,17 @@ def _despesas_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
 
 
 @router.get("/resumo", response_model=schemas.FinanceiroResumoOut)
-def resumo_financeiro(db: Session = Depends(get_db)):
+def resumo_financeiro(ano: int | None = None, db: Session = Depends(get_db)):
     agora = datetime.utcnow()
+    ano_resumo = ano if ano is not None else agora.year
 
     faturamento_mes = _faturamento_tecnico_periodo(db, agora.year, agora.month) + _faturamento_venda_periodo(db, agora.year, agora.month)
     custo_pecas_mes = _custo_pecas_periodo(db, agora.year, agora.month) + _custo_vendas_periodo(db, agora.year, agora.month)
     despesas_mes = _despesas_periodo(db, agora.year, agora.month)
 
-    faturamento_ano = _faturamento_tecnico_periodo(db, agora.year) + _faturamento_venda_periodo(db, agora.year)
-    custo_pecas_ano = _custo_pecas_periodo(db, agora.year) + _custo_vendas_periodo(db, agora.year)
-    despesas_ano = _despesas_periodo(db, agora.year)
+    faturamento_ano = _faturamento_tecnico_periodo(db, ano_resumo) + _faturamento_venda_periodo(db, ano_resumo)
+    custo_pecas_ano = _custo_pecas_periodo(db, ano_resumo) + _custo_vendas_periodo(db, ano_resumo)
+    despesas_ano = _despesas_periodo(db, ano_resumo)
 
     def contar_orcamentos(status: str | None = None) -> int:
         query = db.query(func.count(models.Orcamento.id))
@@ -109,6 +110,7 @@ def resumo_financeiro(db: Session = Depends(get_db)):
         return query.scalar()
 
     return schemas.FinanceiroResumoOut(
+        ano=ano_resumo,
         faturamento_mes=faturamento_mes,
         custo_pecas_mes=custo_pecas_mes,
         despesas_mes=despesas_mes,

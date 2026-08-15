@@ -447,6 +447,7 @@ class VisitaProximaOut(BaseModel):
 # ---------- Financeiro ----------
 
 class FinanceiroResumoOut(BaseModel):
+    ano: Optional[int] = None
     faturamento_mes: Decimal
     custo_pecas_mes: Decimal
     despesas_mes: Decimal

@@ -370,9 +370,15 @@ class ItemPecaOSOut(BaseModel):
 # ---------- Dashboard (só operacional) ----------
 
 class DashboardOut(BaseModel):
+    ano: Optional[int] = None
     os_abertas: int
     os_em_andamento: int
     os_concluidas: int
+    os_total: int
+    orcamentos_pendentes: int
+    orcamentos_aprovados: int
+    orcamentos_recusados: int
+    orcamentos_total: int
     contratos_ativos: int
     pecas_com_estoque_baixo: list[PecaOut]
 

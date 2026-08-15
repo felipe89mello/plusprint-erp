@@ -392,54 +392,138 @@ function relationLabel(entityKey, id) {
 // Renderização: Dashboard
 // ---------------------------------------------------------------
 
+let dashboardAnoSelecionado = null;
+
+function buildDashboardHtml(d) {
+  return `
+    <h3 class="panel-title">Orçamentos</h3>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">Aprovados</div>
+        <div class="metric-value" style="color:var(--green)">${d.orcamentos_aprovados}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Pendentes</div>
+        <div class="metric-value amber">${d.orcamentos_pendentes}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Reprovados</div>
+        <div class="metric-value" style="color:var(--red)">${d.orcamentos_recusados}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total</div>
+        <div class="metric-value">${d.orcamentos_total}</div>
+      </div>
+    </div>
+
+    <h3 class="panel-title" style="margin-top:24px">Ordens de Serviço</h3>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">Abertas</div>
+        <div class="metric-value amber">${d.os_abertas}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Em andamento</div>
+        <div class="metric-value" style="color:var(--ink)">${d.os_em_andamento}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Concluídas</div>
+        <div class="metric-value" style="color:var(--green)">${d.os_concluidas}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total</div>
+        <div class="metric-value">${d.os_total}</div>
+      </div>
+    </div>
+
+    <div class="metric-grid" style="margin-top:24px">
+      <div class="metric-card">
+        <div class="metric-label">Contratos ativos</div>
+        <div class="metric-value">${d.contratos_ativos}</div>
+      </div>
+    </div>
+
+    <h3 class="panel-title">Peças com estoque baixo</h3>
+    <div class="table-wrap">
+      ${
+        d.pecas_com_estoque_baixo.length === 0
+          ? `<div class="empty-state">Nenhuma peça com estoque baixo no momento.</div>`
+          : `<table>
+              <thead><tr><th>Nome</th><th>Estoque</th><th>Valor unitário</th></tr></thead>
+              <tbody>
+                ${d.pecas_com_estoque_baixo
+                  .map(
+                    (p) => `<tr>
+                      <td>${p.nome}</td>
+                      <td class="mono" style="color:var(--red)">${p.quantidade_estoque}</td>
+                      <td class="mono">${formatMoney(p.valor_unitario)}</td>
+                    </tr>`
+                  )
+                  .join("")}
+              </tbody>
+            </table>`
+      }
+    </div>
+  `;
+}
+
+async function selecionarAnoDashboard(anoOuNull) {
+  dashboardAnoSelecionado = anoOuNull;
+  const root = document.getElementById("view-root");
+  const botoesWrap = document.getElementById("dashboard-ano-botoes");
+  const corpo = document.getElementById("dashboard-corpo");
+  if (botoesWrap) {
+    botoesWrap.querySelectorAll("[data-ano-dashboard]").forEach((btn) => {
+      const btnAno = btn.dataset.anoDashboard === "total" ? null : Number(btn.dataset.anoDashboard);
+      btn.className = `btn ${btnAno === anoOuNull ? "btn-primary" : ""}`;
+      btn.style.cssText = "padding:6px 14px;font-size:12.5px";
+    });
+  }
+  if (corpo) corpo.innerHTML = `<div class="empty-state">Carregando...</div>`;
+  try {
+    const qs = anoOuNull ? `?ano=${anoOuNull}` : "";
+    const d = await apiGet(`/dashboard/${qs}`);
+    if (corpo) corpo.innerHTML = buildDashboardHtml(d);
+  } catch (e) {
+    if (corpo) corpo.innerHTML = `<div class="empty-state">Não foi possível carregar o dashboard.</div>`;
+    else if (root) root.innerHTML = `<div class="empty-state">Não foi possível carregar o dashboard. A API está rodando?</div>`;
+  }
+}
+
 async function renderDashboard() {
   const root = document.getElementById("view-root");
   root.innerHTML = `<div class="empty-state">Carregando indicadores...</div>`;
 
   try {
-    const d = await apiGet("/dashboard/");
-    root.innerHTML = `
-      <div class="metric-grid">
-        <div class="metric-card">
-          <div class="metric-label">OS abertas</div>
-          <div class="metric-value">${d.os_abertas}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">OS em andamento</div>
-          <div class="metric-value">${d.os_em_andamento}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">OS concluídas</div>
-          <div class="metric-value">${d.os_concluidas}</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">Contratos ativos</div>
-          <div class="metric-value">${d.contratos_ativos}</div>
-        </div>
-      </div>
+    const anos = await apiGet("/dashboard/anos-disponiveis");
+    if (dashboardAnoSelecionado === null) {
+      const anoAtual = new Date().getFullYear();
+      dashboardAnoSelecionado = anos.includes(anoAtual) ? anoAtual : null;
+    }
 
-      <h3 class="panel-title">Peças com estoque baixo</h3>
-      <div class="table-wrap">
-        ${
-          d.pecas_com_estoque_baixo.length === 0
-            ? `<div class="empty-state">Nenhuma peça com estoque baixo no momento.</div>`
-            : `<table>
-                <thead><tr><th>Nome</th><th>Estoque</th><th>Valor unitário</th></tr></thead>
-                <tbody>
-                  ${d.pecas_com_estoque_baixo
-                    .map(
-                      (p) => `<tr>
-                        <td>${p.nome}</td>
-                        <td class="mono" style="color:var(--red)">${p.quantidade_estoque}</td>
-                        <td class="mono">${formatMoney(p.valor_unitario)}</td>
-                      </tr>`
-                    )
-                    .join("")}
-                </tbody>
-              </table>`
-        }
+    const botoesAno = anos
+      .map((a) => `<button type="button" class="btn" data-ano-dashboard="${a}">${a}</button>`)
+      .join("");
+
+    root.innerHTML = `
+      <div class="panel-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span>Visão geral</span>
+        <span id="dashboard-ano-botoes" style="display:flex;gap:6px">
+          ${botoesAno}
+          <button type="button" class="btn" data-ano-dashboard="total">Total</button>
+        </span>
       </div>
+      <div id="dashboard-corpo"></div>
     `;
+
+    document.querySelectorAll("[data-ano-dashboard]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const btnAno = btn.dataset.anoDashboard === "total" ? null : Number(btn.dataset.anoDashboard);
+        selecionarAnoDashboard(btnAno);
+      });
+    });
+
+    await selecionarAnoDashboard(dashboardAnoSelecionado);
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar o dashboard. A API está rodando?</div>`;
   }

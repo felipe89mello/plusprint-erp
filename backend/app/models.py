@@ -252,3 +252,19 @@ class Usuario(Base):
     senha_salt = Column(String(64), nullable=False)
     ativo = Column(Boolean, default=True, nullable=False)
     criado_em = Column(DateTime, default=datetime.utcnow)
+
+
+class Visita(Base):
+    """Visita agendada (ou já feita) a um cliente — substitui o calendário
+    manual de visitas. Sem vínculo com contrato: é só agenda + anotação."""
+
+    __tablename__ = "visitas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    data = Column(Date, nullable=False)
+    observacoes = Column(Text, nullable=True)
+    status = Column(String(20), default="agendada")  # agendada | realizada | cancelada
+    criado_em = Column(DateTime, default=datetime.utcnow)
+
+    cliente = relationship("Cliente")

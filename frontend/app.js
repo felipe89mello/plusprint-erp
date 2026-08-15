@@ -254,6 +254,23 @@ const ENTITIES = {
       { name: "observacoes", label: "Observações", type: "textarea" },
     ],
   },
+
+  visitas: {
+    title: "Visitas",
+    endpoint: "/visitas/",
+    columns: [
+      { key: "data", label: "Data", date: true },
+      { key: "cliente_id", label: "Cliente", relation: "clientes" },
+      { key: "status", label: "Status" },
+      { key: "observacoes", label: "Anotação" },
+    ],
+    fields: [
+      { name: "cliente_id", label: "Cliente", type: "select", relation: "clientes", required: true },
+      { name: "data", label: "Data", type: "date", required: true },
+      { name: "status", label: "Status", type: "select", options: ["agendada", "realizada", "cancelada"] },
+      { name: "observacoes", label: "Anotação", type: "textarea" },
+    ],
+  },
 };
 
 // Cache simples em memória, usado para preencher os <select> de relação
@@ -467,6 +484,44 @@ function buildDashboardHtml(d) {
   `;
 }
 
+function buildProximasVisitasHtml(visitas) {
+  if (visitas.length === 0) {
+    return `<div class="empty-state">Nenhuma visita agendada.</div>`;
+  }
+  const hoje = new Date().toISOString().slice(0, 10);
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Data</th><th>Cliente</th><th>Anotação</th><th></th></tr></thead>
+    <tbody>${visitas
+      .map((v) => {
+        const atrasada = v.data < hoje;
+        return `<tr>
+          <td class="mono" ${atrasada ? 'style="color:var(--red)"' : ""}>${formatDate(v.data)}</td>
+          <td>${v.cliente_nome}</td>
+          <td>${v.observacoes || "—"}</td>
+          <td class="row-actions"><button type="button" class="btn btn-edit" data-visita-realizada="${v.id}">Marcar como realizada</button></td>
+        </tr>`;
+      })
+      .join("")}</tbody>
+  </table></div>`;
+}
+
+async function marcarVisitaRealizada(id) {
+  try {
+    await apiSend(`/visitas/${id}`, "PUT", { status: "realizada" });
+    showAlert("Visita marcada como realizada.", "success");
+    const wrap = document.getElementById("dashboard-visitas-wrap");
+    if (wrap) {
+      const visitas = await apiGet("/visitas/proximas");
+      wrap.innerHTML = buildProximasVisitasHtml(visitas);
+      wrap.querySelectorAll("[data-visita-realizada]").forEach((btn) => {
+        btn.addEventListener("click", () => marcarVisitaRealizada(Number(btn.dataset.visitaRealizada)));
+      });
+    }
+  } catch (e) {
+    showAlert(e.message);
+  }
+}
+
 async function selecionarAnoDashboard(anoOuNull) {
   dashboardAnoSelecionado = anoOuNull;
   const root = document.getElementById("view-root");
@@ -495,7 +550,10 @@ async function renderDashboard() {
   root.innerHTML = `<div class="empty-state">Carregando indicadores...</div>`;
 
   try {
-    const anos = await apiGet("/dashboard/anos-disponiveis");
+    const [anos, proximasVisitas] = await Promise.all([
+      apiGet("/dashboard/anos-disponiveis"),
+      apiGet("/visitas/proximas"),
+    ]);
     if (dashboardAnoSelecionado === null) {
       const anoAtual = new Date().getFullYear();
       dashboardAnoSelecionado = anos.includes(anoAtual) ? anoAtual : null;
@@ -506,7 +564,10 @@ async function renderDashboard() {
       .join("");
 
     root.innerHTML = `
-      <div class="panel-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <h3 class="panel-title">Próximas Visitas</h3>
+      <div id="dashboard-visitas-wrap">${buildProximasVisitasHtml(proximasVisitas)}</div>
+
+      <div class="panel-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:24px">
         <span>Visão geral</span>
         <span id="dashboard-ano-botoes" style="display:flex;gap:6px">
           ${botoesAno}
@@ -515,6 +576,10 @@ async function renderDashboard() {
       </div>
       <div id="dashboard-corpo"></div>
     `;
+
+    document.getElementById("dashboard-visitas-wrap").querySelectorAll("[data-visita-realizada]").forEach((btn) => {
+      btn.addEventListener("click", () => marcarVisitaRealizada(Number(btn.dataset.visitaRealizada)));
+    });
 
     document.querySelectorAll("[data-ano-dashboard]").forEach((btn) => {
       btn.addEventListener("click", () => {

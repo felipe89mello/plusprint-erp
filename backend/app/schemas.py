@@ -410,6 +410,40 @@ class DespesaOut(DespesaBase):
     id: int
 
 
+# ---------- Visita ----------
+
+class VisitaBase(BaseModel):
+    cliente_id: int
+    data: date
+    observacoes: Optional[str] = None
+    status: str = "agendada"
+
+
+class VisitaCreate(VisitaBase):
+    pass
+
+
+class VisitaUpdate(BaseModel):
+    cliente_id: Optional[int] = None
+    data: Optional[date] = None
+    observacoes: Optional[str] = None
+    status: Optional[str] = None
+
+
+class VisitaOut(VisitaBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class VisitaProximaOut(BaseModel):
+    id: int
+    cliente_id: int
+    cliente_nome: str
+    data: date
+    observacoes: Optional[str] = None
+    status: str
+
+
 # ---------- Financeiro ----------
 
 class FinanceiroResumoOut(BaseModel):

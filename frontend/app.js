@@ -2046,8 +2046,16 @@ document.getElementById("btn-novo").addEventListener("click", () => {
   else openModal(currentView);
 });
 document.getElementById("modal-close").addEventListener("click", closeModal);
+let modalMousedownNoOverlay = false;
+document.getElementById("modal-overlay").addEventListener("mousedown", (ev) => {
+  // Só conta como "clique fora" se o botão foi pressionado E solto no
+  // fundo escuro — evita fechar o modal quando você seleciona texto ou
+  // arrasta dentro de um campo e o mouse escorrega pra fora sem querer.
+  modalMousedownNoOverlay = ev.target.id === "modal-overlay";
+});
 document.getElementById("modal-overlay").addEventListener("click", (ev) => {
-  if (ev.target.id === "modal-overlay") closeModal();
+  if (ev.target.id === "modal-overlay" && modalMousedownNoOverlay) closeModal();
+  modalMousedownNoOverlay = false;
 });
 
 const btnLogout = document.getElementById("btn-logout");

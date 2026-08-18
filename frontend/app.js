@@ -141,7 +141,7 @@ const ENTITIES = {
     title: "Ordens de Serviço",
     endpoint: "/ordens-servico/",
     custom: true, // este módulo usa formulário próprio (openOrdemModal) — inclui peças utilizadas
-    sort: compareNumero,
+    sort: compareNumeroDesc,
     filterEmpresa: true,
     statusFilters: [
       { value: "aberto", label: "Aberto" },

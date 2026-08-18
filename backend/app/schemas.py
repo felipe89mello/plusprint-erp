@@ -101,6 +101,7 @@ class OrdemServicoCreate(OrdemServicoBase):
 
 
 class OrdemServicoUpdate(BaseModel):
+    numero: Optional[str] = None
     orcamento_id: Optional[int] = None
     descricao: Optional[str] = None
     status: Optional[str] = None

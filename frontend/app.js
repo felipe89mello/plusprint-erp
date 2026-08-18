@@ -168,7 +168,7 @@ const ENTITIES = {
     title: "Orçamentos",
     endpoint: "/orcamentos/",
     custom: true, // este módulo usa formulário próprio (openOrcamentoModal), não o motor genérico
-    sort: compareNumero,
+    sort: compareNumeroDesc,
     filterEmpresa: true,
     statusFilters: [
       { value: "pendente", label: "Pendente" },
@@ -998,6 +998,13 @@ function compareNumero(a, b) {
   if (!a.numero) return 1; // sem número vai para o fim
   if (!b.numero) return -1;
   return a.numero.localeCompare(b.numero, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function compareNumeroDesc(a, b) {
+  if (!a.numero && !b.numero) return 0;
+  if (!a.numero) return 1; // sem número vai para o fim, mesmo em ordem decrescente
+  if (!b.numero) return -1;
+  return b.numero.localeCompare(a.numero, undefined, { numeric: true, sensitivity: "base" });
 }
 
 async function preloadRelations(config) {

@@ -551,10 +551,10 @@ tbody tr[data-open-os] { cursor: pointer; }
   background: currentColor;
 }
 
-.badge.status-aberto, .badge.status-ativo, .badge.status-pendente, .badge.status-aguardando_conclusao, .badge.status-vence_em_breve { background: var(--amber-dim); color: #9A6A18; }
+.badge.status-aberto, .badge.status-ativo, .badge.status-pendente, .badge.status-aguardando_conclusao, .badge.status-vence_em_breve, .badge.status-agendada { background: var(--amber-dim); color: #9A6A18; }
 .badge.status-em_andamento { background: #E4EEF8; color: #2C5F8A; }
-.badge.status-concluido, .badge.status-aprovado, .badge.status-pago, .badge.status-em_dia { background: #E9F3EC; color: var(--green); }
-.badge.status-recusado, .badge.status-encerrado, .badge.status-suspenso, .badge.status-atrasado { background: #FBEAE7; color: var(--red); }
+.badge.status-concluido, .badge.status-aprovado, .badge.status-pago, .badge.status-em_dia, .badge.status-realizada { background: #E9F3EC; color: var(--green); }
+.badge.status-recusado, .badge.status-encerrado, .badge.status-suspenso, .badge.status-atrasado, .badge.status-cancelada { background: #FBEAE7; color: var(--red); }
 
 .empty-state {
   padding: 48px 20px;

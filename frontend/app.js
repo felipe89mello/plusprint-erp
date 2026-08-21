@@ -121,6 +121,9 @@ const ENTITIES = {
   equipamentos: {
     title: "Equipamentos",
     endpoint: "/equipamentos/",
+    searchCliente: true,
+    searchFields: ["marca", "modelo", "numero_serie", "tipo"],
+    searchPlaceholder: "Buscar por cliente, marca, modelo...",
     columns: [
       { key: "id", label: "ID", mono: true },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
@@ -211,6 +214,8 @@ const ENTITIES = {
     title: "Peças / Estoque",
     endpoint: "/pecas/",
     sort: compareNome,
+    searchFields: ["nome", "partnumber", "marca", "modelo"],
+    searchPlaceholder: "Buscar por nome, partnumber, marca...",
     columns: [
       { key: "id", label: "ID", mono: true },
       { key: "nome", label: "Nome" },
@@ -235,6 +240,8 @@ const ENTITIES = {
   despesas: {
     title: "Despesas",
     endpoint: "/despesas/",
+    searchFields: ["descricao", "categoria", "observacoes"],
+    searchPlaceholder: "Buscar por descrição, categoria...",
     columns: [
       { key: "data", label: "Data", date: true },
       { key: "descricao", label: "Descrição" },
@@ -258,10 +265,13 @@ const ENTITIES = {
   visitas: {
     title: "Visitas",
     endpoint: "/visitas/",
+    searchCliente: true,
+    searchFields: ["observacoes"],
+    searchPlaceholder: "Buscar por cliente, anotação...",
     columns: [
       { key: "data", label: "Data", date: true },
       { key: "cliente_id", label: "Cliente", relation: "clientes" },
-      { key: "status", label: "Status" },
+      { key: "status", label: "Status", badge: true },
       { key: "observacoes", label: "Anotação" },
     ],
     fields: [
@@ -1055,13 +1065,25 @@ function nomeClienteDoItem(viewKey, item) {
   return cli ? cli.nome : "";
 }
 
+function itemTextoBuscavel(viewKey, config, item) {
+  const partes = [];
+  if (config.filterEmpresa || config.searchCliente) partes.push(nomeClienteDoItem(viewKey, item));
+  if (config.searchFields) {
+    config.searchFields.forEach((campo) => {
+      if (item[campo] != null) partes.push(String(item[campo]));
+    });
+  }
+  return partes.join(" ").toLowerCase();
+}
+
 function applyFilters(viewKey, items) {
+  const config = ENTITIES[viewKey];
   const state = filterState[viewKey] || {};
   let filtrados = items;
   if (state.status) filtrados = filtrados.filter((i) => i.status === state.status);
-  if (state.empresa) {
-    const termo = state.empresa.toLowerCase();
-    filtrados = filtrados.filter((i) => nomeClienteDoItem(viewKey, i).toLowerCase().includes(termo));
+  if (state.busca) {
+    const termo = state.busca.toLowerCase();
+    filtrados = filtrados.filter((i) => itemTextoBuscavel(viewKey, config, i).includes(termo));
   }
   return filtrados;
 }
@@ -1074,9 +1096,10 @@ function buildFilterBarHtml(viewKey, config) {
         `<button type="button" class="filter-btn ${state.status === s.value ? "active" : ""}" data-filter-status="${s.value}">${s.label}</button>`
     )
     .join("");
-  const searchHtml = config.filterEmpresa
-    ? `<input type="text" id="filtro-empresa" class="filter-search" placeholder="Buscar por empresa..." value="${state.empresa || ""}">`
-    : "";
+  const searchHtml =
+    config.filterEmpresa || config.searchFields || config.searchCliente
+      ? `<input type="text" id="filtro-busca" class="filter-search" placeholder="${config.searchPlaceholder || "Buscar..."}" value="${state.busca || ""}">`
+      : "";
   return `<div class="filter-bar">${statusBtns}${searchHtml}</div>`;
 }
 
@@ -1089,10 +1112,10 @@ function wireFilterBar(viewKey) {
       renderTableInto(viewKey, cache[viewKey]);
     });
   });
-  const searchInput = document.getElementById("filtro-empresa");
+  const searchInput = document.getElementById("filtro-busca");
   if (searchInput) {
     searchInput.addEventListener("input", () => {
-      filterState[viewKey].empresa = searchInput.value;
+      filterState[viewKey].busca = searchInput.value;
       renderTableInto(viewKey, cache[viewKey]);
     });
   }
@@ -1201,7 +1224,7 @@ async function renderList(viewKey) {
     }
 
     if (!filterState[viewKey]) filterState[viewKey] = { status: null, empresa: "" };
-    const temFiltro = config.statusFilters || config.filterEmpresa;
+    const temFiltro = config.statusFilters || config.filterEmpresa || config.searchFields || config.searchCliente;
 
     root.innerHTML = (temFiltro ? buildFilterBarHtml(viewKey, config) : "") + `<div id="table-container"></div>`;
     if (temFiltro) wireFilterBar(viewKey);

@@ -351,7 +351,7 @@ def gerar_pdf_orcamento(orcamento_id: int, db: Session = Depends(get_db)):
     pdf_bytes = _gerar_pdf_bytes(orcamento)
     numero = orcamento.numero or orcamento.id
     cliente_slug = _slugify(orcamento.cliente.nome)
-    filename = f"orcamento_{numero}_{cliente_slug}.pdf"
+    filename = f"{numero}_orcamento_{cliente_slug}.pdf"
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

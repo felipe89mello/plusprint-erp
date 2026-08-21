@@ -328,9 +328,22 @@ async function abrirPdf(url) {
       return;
     }
     if (!res.ok) throw new Error("Não foi possível gerar o PDF.");
+
+    // O backend já manda o nome certo no Content-Disposition (ex:
+    // os_057_Almad.pdf) — só precisa ser lido explicitamente aqui, porque
+    // um blob: URL não carrega esse cabeçalho sozinho.
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = match ? match[1] : "documento.pdf";
+
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
-    window.open(blobUrl, "_blank");
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   } catch (e) {
     showAlert(e.message);

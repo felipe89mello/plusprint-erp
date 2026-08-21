@@ -374,6 +374,16 @@ function formatMoney(v) {
 
 function formatDate(v) {
   if (!v) return "—";
+  // Campos "date" (sem hora) vêm como "AAAA-MM-DD". Se passar isso direto
+  // pro construtor do Date, o JS interpreta como meia-noite UTC e, ao
+  // converter pro fuso local (Brasil, UTC-3), "volta" pro dia anterior —
+  // por isso datas apareciam sempre 1 dia a menos. Montando a data manual,
+  // sem passar pelo Date, evita esse problema.
+  const soData = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (soData) {
+    const [, ano, mes, dia] = soData;
+    return `${dia}/${mes}/${ano}`;
+  }
   return new Date(v).toLocaleDateString("pt-BR");
 }
 
@@ -488,7 +498,10 @@ function buildProximasVisitasHtml(visitas) {
   if (visitas.length === 0) {
     return `<div class="empty-state">Nenhuma visita agendada.</div>`;
   }
-  const hoje = new Date().toISOString().slice(0, 10);
+  // Data local (não UTC) — evita marcar visitas de hoje à noite como
+  // "atrasada" por causa do fuso horário (mesma causa do bug do formatDate).
+  const agora = new Date();
+  const hoje = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
   return `<div class="table-wrap"><table>
     <thead><tr><th>Data</th><th>Cliente</th><th>Anotação</th><th></th></tr></thead>
     <tbody>${visitas

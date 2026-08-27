@@ -803,7 +803,9 @@ function buildContasReceberHtml(contas) {
     .map((c) => {
       const badge = `<span class="badge status-${c.situacao}">${SITUACAO_LABEL[c.situacao] || c.situacao}</span>`;
       const venc = c.data_vencimento ? formatDate(c.data_vencimento) : "—";
-      const acao = c.pago ? "" : `<button class="btn btn-pagar" data-marcar-pago="${c.orcamento_id}">Marcar como pago</button>`;
+      const acao = c.pago
+        ? `<button class="btn btn-danger" data-desmarcar-pago="${c.orcamento_id}">Desfazer pagamento</button>`
+        : `<button class="btn btn-pagar" data-marcar-pago="${c.orcamento_id}">Marcar como pago</button>`;
       return `<tr>
         <td class="mono">${c.numero || "—"}</td>
         <td>${c.cliente_nome}</td>
@@ -885,6 +887,18 @@ async function renderFinanceiro() {
         try {
           await apiSend(`/orcamentos/${btn.dataset.marcarPago}`, "PUT", { pago: true });
           showAlert("Orçamento marcado como pago.", "success");
+          renderFinanceiro();
+        } catch (e) {
+          showAlert(e.message);
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-desmarcar-pago]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await apiSend(`/orcamentos/${btn.dataset.desmarcarPago}`, "PUT", { pago: false });
+          showAlert("Pagamento desfeito — orçamento voltou para Contas a Receber.", "success");
           renderFinanceiro();
         } catch (e) {
           showAlert(e.message);

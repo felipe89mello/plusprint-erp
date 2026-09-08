@@ -410,9 +410,14 @@ function formatDate(v) {
   return new Date(v).toLocaleDateString("pt-BR");
 }
 
-const TIPO_ORCAMENTO_LABEL = { tecnico: "Técnico / Manutenção", venda_equipamento: "Venda de Equipamento" };
+const TIPO_ORCAMENTO_LABEL = { tecnico: "Técnico / Manutenção", venda_equipamento: "Venda de Equipamento", desenvolvimento: "Desenvolvimento" };
 function formatTipoOrcamento(v) {
   return TIPO_ORCAMENTO_LABEL[v] || TIPO_ORCAMENTO_LABEL.tecnico;
+}
+
+const TIPO_ORCAMENTO_LABEL_CURTO = { venda_equipamento: "Venda de equipamento", desenvolvimento: "Desenvolvimento", tecnico: "Técnico" };
+function formatTipoOrcamentoCurto(v) {
+  return TIPO_ORCAMENTO_LABEL_CURTO[v] || TIPO_ORCAMENTO_LABEL_CURTO.tecnico;
 }
 
 function labelForItem(item) {
@@ -959,7 +964,7 @@ function buildDetalheMensalHtml(detalhe) {
               return `<tr>
                 <td class="mono">${o.numero || "—"}</td>
                 <td>${o.cliente_nome}</td>
-                <td>${o.tipo === "venda_equipamento" ? "Venda de equipamento" : "Técnico"}</td>
+                <td>${formatTipoOrcamentoCurto(o.tipo)}</td>
                 <td class="mono">${formatMoney(o.valor)}</td>
                 <td class="mono">${temCusto ? formatMoney(o.custo) : "—"}</td>
                 <td class="mono">${temCusto ? formatMoney(margem) : "—"}</td>
@@ -1487,6 +1492,7 @@ async function openOrcamentoModal(existingItem) {
       <div class="field"><label>Tipo de orçamento</label>
         <select name="tipo" id="orcamento-tipo">
           <option value="tecnico" ${tipoAtual === "tecnico" ? "selected" : ""}>Técnico / Manutenção</option>
+          <option value="desenvolvimento" ${tipoAtual === "desenvolvimento" ? "selected" : ""}>Desenvolvimento</option>
           <option value="venda_equipamento" ${tipoAtual === "venda_equipamento" ? "selected" : ""}>Venda de Equipamento</option>
         </select>
       </div>
@@ -1494,16 +1500,23 @@ async function openOrcamentoModal(existingItem) {
     </div>
 
     <div id="secao-tecnico">
-      <div class="field"><label>Local</label><input type="text" name="local_equipamento" value="${v("local_equipamento")}" placeholder="ex: Loja Mooca"></div>
+      <div id="secao-equipamentos">
+        <div class="field"><label>Local</label><input type="text" name="local_equipamento" value="${v("local_equipamento")}" placeholder="ex: Loja Mooca"></div>
 
-      <label class="field-label-block">Equipamentos — defeito e solução de cada um</label>
-      <div class="picker-row">
-        <select id="equipamento-picker">${equipamentosPickerOptions()}</select>
-        <button type="button" class="btn" id="btn-add-equip">+ Adicionar</button>
+        <label class="field-label-block">Equipamentos — defeito e solução de cada um</label>
+        <div class="picker-row">
+          <select id="equipamento-picker">${equipamentosPickerOptions()}</select>
+          <button type="button" class="btn" id="btn-add-equip">+ Adicionar</button>
+        </div>
+        <div id="equipamentos-cards"></div>
       </div>
-      <div id="equipamentos-cards"></div>
 
-      <label class="field-label-block">Peças e Serviços</label>
+      <div class="field hidden" id="campo-escopo-servico">
+        <label>Escopo do Serviço</label>
+        <textarea name="escopo_servico" placeholder="Descreva o projeto/serviço a ser desenvolvido">${v("escopo_servico")}</textarea>
+      </div>
+
+      <label class="field-label-block" id="label-itens-tecnico">Peças e Serviços</label>
       <table class="items-table">
         <thead><tr><th>Qtde./Hrs</th><th>Descrição</th><th>Unitário (R$)</th><th>Total</th><th></th></tr></thead>
         <tbody id="itens-body">${itensExistentes.map(itemRowHtml).join("")}</tbody>
@@ -1561,8 +1574,12 @@ async function openOrcamentoModal(existingItem) {
 
   function toggleSecaoPorTipo() {
     const tipo = document.getElementById("orcamento-tipo").value;
-    document.getElementById("secao-tecnico").classList.toggle("hidden", tipo !== "tecnico");
+    const mostrarItensTecnicos = tipo === "tecnico" || tipo === "desenvolvimento";
+    document.getElementById("secao-tecnico").classList.toggle("hidden", !mostrarItensTecnicos);
     document.getElementById("secao-venda").classList.toggle("hidden", tipo !== "venda_equipamento");
+    document.getElementById("secao-equipamentos").classList.toggle("hidden", tipo !== "tecnico");
+    document.getElementById("campo-escopo-servico").classList.toggle("hidden", tipo !== "desenvolvimento");
+    document.getElementById("label-itens-tecnico").textContent = tipo === "desenvolvimento" ? "Itens do Projeto" : "Peças e Serviços";
   }
   document.getElementById("orcamento-tipo").addEventListener("change", toggleSecaoPorTipo);
   toggleSecaoPorTipo();

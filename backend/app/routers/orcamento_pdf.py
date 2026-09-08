@@ -112,7 +112,13 @@ def _gerar_pdf_tecnico(orcamento: models.Orcamento) -> bytes:
     story.append(t)
 
     # Equipamento(s) — cada um com seu próprio diagnóstico e solução
-    if orcamento.itens_equipamento or orcamento.local_equipamento:
+    # (não se aplica ao tipo "desenvolvimento", que não tem equipamento
+    # físico vinculado — nesse caso, mostra o Escopo do Serviço no lugar)
+    if orcamento.tipo == "desenvolvimento":
+        if orcamento.escopo_servico:
+            story.append(Paragraph("Escopo do Serviço", section_style))
+            story.append(Paragraph(orcamento.escopo_servico, body_style))
+    elif orcamento.itens_equipamento or orcamento.local_equipamento:
         titulo_eq = "Equipamento" if len(orcamento.itens_equipamento) <= 1 else "Equipamentos"
         story.append(Paragraph(titulo_eq, section_style))
 
@@ -138,7 +144,9 @@ def _gerar_pdf_tecnico(orcamento: models.Orcamento) -> bytes:
 
     # Itens
     story.append(Paragraph("Peças e Serviços", section_style))
-    tabela_dados = [["Qtde./Hrs", "Descrição", "Unitário", "Total"]]
+    col_qtde = "Qtde." if orcamento.tipo == "desenvolvimento" else "Qtde./Hrs"
+    col_desc = "Complexidade" if orcamento.tipo == "desenvolvimento" else "Descrição"
+    tabela_dados = [[col_qtde, col_desc, "Unitário", "Total"]]
     for item in orcamento.itens:
         total_item = item.quantidade * item.valor_unitario
         tabela_dados.append([

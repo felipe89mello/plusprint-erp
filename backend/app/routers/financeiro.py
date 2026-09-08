@@ -27,6 +27,7 @@ def _faturamento_tecnico_periodo(db: Session, ano: int, mes: int | None = None) 
         .join(models.Orcamento, models.ItemOrcamento.orcamento_id == models.Orcamento.id)
         .join(models.OrdemServico, models.OrdemServico.orcamento_id == models.Orcamento.id)
         .filter(
+            models.Orcamento.tipo != "desenvolvimento",  # esse tipo é contado à parte, na aprovação
             models.OrdemServico.status == "concluido",
             extract("year", models.OrdemServico.data_conclusao) == ano,
         )
@@ -43,6 +44,24 @@ def _faturamento_venda_periodo(db: Session, ano: int, mes: int | None = None) ->
         db.query(func.coalesce(func.sum(models.ItemVendaEquipamento.quantidade * models.ItemVendaEquipamento.preco_unitario), 0))
         .join(models.Orcamento, models.ItemVendaEquipamento.orcamento_id == models.Orcamento.id)
         .filter(
+            models.Orcamento.status == "aprovado",
+            extract("year", models.Orcamento.data) == ano,
+        )
+    )
+    if mes is not None:
+        query = query.filter(extract("month", models.Orcamento.data) == mes)
+    return query.scalar()
+
+
+def _faturamento_desenvolvimento_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
+    """Soma dos itens de orçamentos de desenvolvimento (ex: projeto de etiquetas)
+    aprovados no período — mesma regra da venda de equipamento: a receita é
+    considerada realizada na aprovação, sem depender de OS."""
+    query = (
+        db.query(func.coalesce(func.sum(models.ItemOrcamento.quantidade * models.ItemOrcamento.valor_unitario), 0))
+        .join(models.Orcamento, models.ItemOrcamento.orcamento_id == models.Orcamento.id)
+        .filter(
+            models.Orcamento.tipo == "desenvolvimento",
             models.Orcamento.status == "aprovado",
             extract("year", models.Orcamento.data) == ano,
         )
@@ -95,11 +114,11 @@ def resumo_financeiro(ano: int | None = None, db: Session = Depends(get_db)):
     agora = datetime.utcnow()
     ano_resumo = ano if ano is not None else agora.year
 
-    faturamento_mes = _faturamento_tecnico_periodo(db, agora.year, agora.month) + _faturamento_venda_periodo(db, agora.year, agora.month)
+    faturamento_mes = _faturamento_tecnico_periodo(db, agora.year, agora.month) + _faturamento_venda_periodo(db, agora.year, agora.month) + _faturamento_desenvolvimento_periodo(db, agora.year, agora.month)
     custo_pecas_mes = _custo_pecas_periodo(db, agora.year, agora.month) + _custo_vendas_periodo(db, agora.year, agora.month)
     despesas_mes = _despesas_periodo(db, agora.year, agora.month)
 
-    faturamento_ano = _faturamento_tecnico_periodo(db, ano_resumo) + _faturamento_venda_periodo(db, ano_resumo)
+    faturamento_ano = _faturamento_tecnico_periodo(db, ano_resumo) + _faturamento_venda_periodo(db, ano_resumo) + _faturamento_desenvolvimento_periodo(db, ano_resumo)
     custo_pecas_ano = _custo_pecas_periodo(db, ano_resumo) + _custo_vendas_periodo(db, ano_resumo)
     despesas_ano = _despesas_periodo(db, ano_resumo)
 
@@ -216,7 +235,7 @@ def faturamento_mensal(ano: int | None = None, db: Session = Depends(get_db)):
 
     pontos = []
     for m in range(1, 13):
-        fat = _faturamento_tecnico_periodo(db, ano, m) + _faturamento_venda_periodo(db, ano, m)
+        fat = _faturamento_tecnico_periodo(db, ano, m) + _faturamento_venda_periodo(db, ano, m) + _faturamento_desenvolvimento_periodo(db, ano, m)
         custo = _custo_pecas_periodo(db, ano, m) + _custo_vendas_periodo(db, ano, m)
         pontos.append(schemas.FaturamentoMensalPonto(ano=ano, mes=m, faturamento=fat, custo=custo, liquido=fat - custo))
     return pontos
@@ -241,6 +260,7 @@ def detalhe_mensal(ano: int, mes: int | None = None, db: Session = Depends(get_d
         .join(models.ItemOrcamento, models.ItemOrcamento.orcamento_id == models.Orcamento.id)
         .join(models.OrdemServico, models.OrdemServico.orcamento_id == models.Orcamento.id)
         .filter(
+            models.Orcamento.tipo != "desenvolvimento",  # esse tipo é contado à parte, na aprovação
             models.OrdemServico.status == "concluido",
             extract("year", models.OrdemServico.data_conclusao) == ano,
         )
@@ -281,6 +301,31 @@ def detalhe_mensal(ano: int, mes: int | None = None, db: Session = Depends(get_d
                     tipo="venda_equipamento",
                     valor=valor,
                     custo=custo,
+                )
+            )
+
+    # Desenvolvimento: mesma regra da venda de equipamento — conta na
+    # aprovação do orçamento, sem depender de OS (não tem equipamento físico
+    # nem visita técnica vinculada).
+    desenvolvimento_query = (
+        db.query(
+            models.Orcamento,
+            func.coalesce(func.sum(models.ItemOrcamento.quantidade * models.ItemOrcamento.valor_unitario), 0).label("valor"),
+        )
+        .join(models.ItemOrcamento, models.ItemOrcamento.orcamento_id == models.Orcamento.id)
+        .filter(
+            models.Orcamento.tipo == "desenvolvimento",
+            models.Orcamento.status == "aprovado",
+            extract("year", models.Orcamento.data) == ano,
+        )
+    )
+    if mes is not None:
+        desenvolvimento_query = desenvolvimento_query.filter(extract("month", models.Orcamento.data) == mes)
+    for o, valor in desenvolvimento_query.group_by(models.Orcamento.id).all():
+        if valor > 0:
+            orcamentos.append(
+                schemas.OrcamentoDetalheMensalOut(
+                    orcamento_id=o.id, numero=o.numero, cliente_nome=o.cliente.nome, tipo="desenvolvimento", valor=valor
                 )
             )
 

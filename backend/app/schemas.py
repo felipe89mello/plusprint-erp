@@ -207,9 +207,10 @@ class ItemVendaEquipamentoOut(ItemVendaEquipamentoCreate):
 
 class OrcamentoBase(BaseModel):
     numero: Optional[str] = None
-    tipo: str = "tecnico"  # tecnico (manutenção) | venda_equipamento
+    tipo: str = "tecnico"  # tecnico (manutenção) | venda_equipamento | desenvolvimento
     cliente_id: int
     local_equipamento: Optional[str] = None
+    escopo_servico: Optional[str] = None
     observacoes: Optional[str] = None
     validade_dias: int = 5
     condicoes_pagamento: Optional[str] = None
@@ -233,6 +234,7 @@ class OrcamentoUpdate(BaseModel):
     numero: Optional[str] = None
     tipo: Optional[str] = None
     local_equipamento: Optional[str] = None
+    escopo_servico: Optional[str] = None
     observacoes: Optional[str] = None
     validade_dias: Optional[int] = None
     condicoes_pagamento: Optional[str] = None

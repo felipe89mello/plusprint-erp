@@ -336,7 +336,7 @@ def _gerar_pdf_venda(orcamento: models.Orcamento) -> bytes:
         f"Condição de Pagamento: {orcamento.condicoes_pagamento or '—'}.",
         "Impostos: Inclusos, acima especificados.",
         "Prazo de Entrega: Conforme descrito.",
-        "Entrega, instalação e treinamento feita por conta da Plusprint Automação.",
+        f"Entrega, instalação e treinamento por conta de: {orcamento.responsabilidade_transporte or 'Plusprint Automação'}.",
     ]
     for linha_texto in condicoes:
         story.append(Paragraph(linha_texto, body_style))

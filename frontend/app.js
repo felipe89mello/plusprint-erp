@@ -1534,14 +1534,14 @@ async function openOrcamentoModal(existingItem) {
 
     <div class="field-row">
       <div class="field"><label>Validade (dias)</label><input type="number" name="validade_dias" value="${v("validade_dias", 5)}"></div>
-      <div class="field"><label>Garantia (dias)</label><input type="number" name="garantia_dias" value="${v("garantia_dias", 90)}"></div>
+      <div class="field" id="campo-garantia-dias"><label>Garantia (dias)</label><input type="number" name="garantia_dias" value="${v("garantia_dias", 90)}"></div>
     </div>
     <div class="field-row">
       <div class="field"><label>Condições de pagamento</label><input type="text" name="condicoes_pagamento" value="${v("condicoes_pagamento")}" placeholder="ex: 28DDL"></div>
-      <div class="field"><label>Prazo de entrega</label><input type="text" name="prazo_entrega" value="${v("prazo_entrega")}" placeholder="ex: 30 dias após aprovação"></div>
+      <div class="field" id="campo-prazo-entrega-geral"><label>Prazo de entrega</label><input type="text" name="prazo_entrega" value="${v("prazo_entrega")}" placeholder="ex: 30 dias após aprovação"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Transporte por conta de</label><input type="text" name="responsabilidade_transporte" value="${v("responsabilidade_transporte", "Cliente")}"></div>
+      <div class="field"><label id="label-transporte">Transporte por conta de</label><input type="text" name="responsabilidade_transporte" value="${v("responsabilidade_transporte", "Cliente")}"></div>
       <div class="field"><label>Técnico / Vendedor responsável</label><input type="text" name="tecnico_responsavel" value="${v("tecnico_responsavel")}"></div>
     </div>
 
@@ -1580,6 +1580,13 @@ async function openOrcamentoModal(existingItem) {
     document.getElementById("secao-equipamentos").classList.toggle("hidden", tipo !== "tecnico");
     document.getElementById("campo-escopo-servico").classList.toggle("hidden", tipo !== "desenvolvimento");
     document.getElementById("label-itens-tecnico").textContent = tipo === "desenvolvimento" ? "Itens do Projeto" : "Peças e Serviços";
+    // Na Venda de Equipamento, Garantia e Prazo de entrega já são definidos
+    // por item (aparecem na tabela do PDF) — os campos gerais abaixo não são
+    // usados nesse caso, então ficam escondidos pra não duplicar.
+    const ehVenda = tipo === "venda_equipamento";
+    document.getElementById("campo-garantia-dias").classList.toggle("hidden", ehVenda);
+    document.getElementById("campo-prazo-entrega-geral").classList.toggle("hidden", ehVenda);
+    document.getElementById("label-transporte").textContent = ehVenda ? "Entrega/instalação por conta de" : "Transporte por conta de";
   }
   document.getElementById("orcamento-tipo").addEventListener("change", toggleSecaoPorTipo);
   toggleSecaoPorTipo();

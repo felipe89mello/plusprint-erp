@@ -447,6 +447,36 @@ class VisitaProximaOut(BaseModel):
     status: str
 
 
+# ---------- Conta a Pagar ----------
+
+class ContaPagarBase(BaseModel):
+    descricao: str
+    fornecedor: Optional[str] = None
+    valor: Decimal
+    data_vencimento: date
+    pago: bool = False
+    observacoes: Optional[str] = None
+
+
+class ContaPagarCreate(ContaPagarBase):
+    pass
+
+
+class ContaPagarUpdate(BaseModel):
+    descricao: Optional[str] = None
+    fornecedor: Optional[str] = None
+    valor: Optional[Decimal] = None
+    data_vencimento: Optional[date] = None
+    pago: Optional[bool] = None
+    observacoes: Optional[str] = None
+
+
+class ContaPagarOut(ContaPagarBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    data_pagamento: Optional[datetime] = None
+
+
 # ---------- Financeiro ----------
 
 class FinanceiroResumoOut(BaseModel):

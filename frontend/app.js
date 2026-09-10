@@ -281,6 +281,28 @@ const ENTITIES = {
       { name: "observacoes", label: "Anotação", type: "textarea" },
     ],
   },
+
+  contas_pagar: {
+    title: "Contas a Pagar",
+    endpoint: "/contas-pagar/",
+    searchFields: ["descricao", "fornecedor", "observacoes"],
+    searchPlaceholder: "Buscar por descrição, fornecedor...",
+    columns: [
+      { key: "data_vencimento", label: "Vencimento", date: true },
+      { key: "descricao", label: "Descrição" },
+      { key: "fornecedor", label: "Fornecedor" },
+      { key: "valor", label: "Valor", money: true },
+      { key: "pago", label: "Status", pagoBadge: true },
+    ],
+    fields: [
+      { name: "descricao", label: "Descrição", type: "text", required: true, placeholder: "ex: Compra Zebra ZD230t p/ revenda (Mari Maria)" },
+      { name: "fornecedor", label: "Fornecedor", type: "text" },
+      { name: "valor", label: "Valor (R$)", type: "number", required: true },
+      { name: "data_vencimento", label: "Vencimento", type: "date", required: true },
+      { name: "pago", label: "Já foi pago", type: "checkbox" },
+      { name: "observacoes", label: "Observações", type: "textarea" },
+    ],
+  },
 };
 
 // Cache simples em memória, usado para preencher os <select> de relação
@@ -563,6 +585,72 @@ async function marcarVisitaRealizada(id) {
   }
 }
 
+function buildContasPagarPendentesHtml(contas) {
+  if (contas.length === 0) {
+    return `<div class="empty-state">Nenhuma conta a pagar pendente.</div>`;
+  }
+  const agora = new Date();
+  const hoje = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Vencimento</th><th>Descrição</th><th>Valor</th><th></th></tr></thead>
+    <tbody>${contas
+      .map((c) => {
+        const atrasada = c.data_vencimento < hoje;
+        return `<tr>
+          <td class="mono" ${atrasada ? 'style="color:var(--red)"' : ""}>${formatDate(c.data_vencimento)}</td>
+          <td>${c.descricao}${c.fornecedor ? ` <span style="color:var(--ink-soft)">— ${c.fornecedor}</span>` : ""}</td>
+          <td class="mono">${formatMoney(c.valor)}</td>
+          <td class="row-actions"><button type="button" class="btn btn-edit" data-conta-pagar-paga="${c.id}">Marcar como paga</button></td>
+        </tr>`;
+      })
+      .join("")}</tbody>
+  </table></div>`;
+}
+
+async function marcarContaPagarPaga(id) {
+  try {
+    await apiSend(`/contas-pagar/${id}`, "PUT", { pago: true });
+    showAlert("Conta marcada como paga.", "success");
+    const wrap = document.getElementById("dashboard-contas-pagar-wrap");
+    if (wrap) {
+      const contas = await apiGet("/contas-pagar/pendentes");
+      wrap.innerHTML = buildContasPagarPendentesHtml(contas);
+      wrap.querySelectorAll("[data-conta-pagar-paga]").forEach((btn) => {
+        btn.addEventListener("click", () => marcarContaPagarPaga(Number(btn.dataset.contaPagarPaga)));
+      });
+    }
+  } catch (e) {
+    showAlert(e.message);
+  }
+}
+
+function buildContasReceberPendentesDashboardHtml(contasReceber) {
+  const pendentes = contasReceber
+    .filter((c) => c.situacao !== "pago")
+    .sort((a, b) => {
+      if (!a.data_vencimento) return 1;
+      if (!b.data_vencimento) return -1;
+      return a.data_vencimento.localeCompare(b.data_vencimento);
+    })
+    .slice(0, 8);
+  if (pendentes.length === 0) {
+    return `<div class="empty-state">Nenhuma conta a receber pendente.</div>`;
+  }
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Vencimento</th><th>Cliente</th><th>Valor</th><th>Situação</th></tr></thead>
+    <tbody>${pendentes
+      .map(
+        (c) => `<tr>
+          <td class="mono">${c.data_vencimento ? formatDate(c.data_vencimento) : "—"}</td>
+          <td>${c.cliente_nome}</td>
+          <td class="mono">${formatMoney(c.valor_total)}</td>
+          <td><span class="badge status-${c.situacao}">${c.situacao.replace(/_/g, " ")}</span></td>
+        </tr>`
+      )
+      .join("")}</tbody>
+  </table></div>`;
+}
+
 async function selecionarAnoDashboard(anoOuNull) {
   dashboardAnoSelecionado = anoOuNull;
   const root = document.getElementById("view-root");
@@ -591,9 +679,11 @@ async function renderDashboard() {
   root.innerHTML = `<div class="empty-state">Carregando indicadores...</div>`;
 
   try {
-    const [anos, proximasVisitas] = await Promise.all([
+    const [anos, proximasVisitas, contasPagarPendentes, contasReceber] = await Promise.all([
       apiGet("/dashboard/anos-disponiveis"),
       apiGet("/visitas/proximas"),
+      apiGet("/contas-pagar/pendentes"),
+      apiGet("/financeiro/contas-a-receber"),
     ]);
     if (dashboardAnoSelecionado === null) {
       const anoAtual = new Date().getFullYear();
@@ -608,6 +698,17 @@ async function renderDashboard() {
       <h3 class="panel-title">Próximas Visitas</h3>
       <div id="dashboard-visitas-wrap">${buildProximasVisitasHtml(proximasVisitas)}</div>
 
+      <div class="dashboard-duas-colunas">
+        <div>
+          <h3 class="panel-title">Contas a Pagar</h3>
+          <div id="dashboard-contas-pagar-wrap">${buildContasPagarPendentesHtml(contasPagarPendentes)}</div>
+        </div>
+        <div>
+          <h3 class="panel-title">Contas a Receber</h3>
+          <div id="dashboard-contas-receber-wrap">${buildContasReceberPendentesDashboardHtml(contasReceber)}</div>
+        </div>
+      </div>
+
       <div class="panel-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:24px">
         <span>Visão geral</span>
         <span id="dashboard-ano-botoes" style="display:flex;gap:6px">
@@ -620,6 +721,10 @@ async function renderDashboard() {
 
     document.getElementById("dashboard-visitas-wrap").querySelectorAll("[data-visita-realizada]").forEach((btn) => {
       btn.addEventListener("click", () => marcarVisitaRealizada(Number(btn.dataset.visitaRealizada)));
+    });
+
+    document.getElementById("dashboard-contas-pagar-wrap").querySelectorAll("[data-conta-pagar-paga]").forEach((btn) => {
+      btn.addEventListener("click", () => marcarContaPagarPaga(Number(btn.dataset.contaPagarPaga)));
     });
 
     document.querySelectorAll("[data-ano-dashboard]").forEach((btn) => {
@@ -1163,6 +1268,7 @@ function renderTableInto(viewKey, allItems) {
           else if (c.date) value = formatDate(value);
           else if (c.tipoOrcamento) value = formatTipoOrcamento(value);
           else if (c.badge) return `<td><span class="badge status-${value}">${value}</span></td>`;
+          else if (c.pagoBadge) return `<td>${value ? '<span class="badge status-pago">Pago</span>' : '<span class="badge status-pendente">Pendente</span>'}</td>`;
           else if (value == null || value === "") value = "—";
 
           const cls = c.mono ? "mono" : "";
@@ -1333,6 +1439,12 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
             </select>
           </div>`;
         }
+        if (f.type === "checkbox") {
+          const checked = currentValue ? "checked" : "";
+          return `<div class="field field-checkbox">
+            <label><input type="checkbox" name="${f.name}" ${checked}> ${f.label}</label>
+          </div>`;
+        }
         if (f.type === "textarea") {
           return `<div class="field">
             <label>${f.label}${f.required ? " *" : ""}</label>
@@ -1360,6 +1472,10 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
     // Conversões de tipo: o HTML sempre entrega string, mas a API espera
     // número/inteiro em vários campos.
     config.fields.forEach((f) => {
+      if (f.type === "checkbox") {
+        data[f.name] = form.querySelector(`[name="${f.name}"]`).checked;
+        return;
+      }
       if (data[f.name] === "") { delete data[f.name]; return; }
       if (f.type === "number") data[f.name] = Number(data[f.name]);
       if (f.type === "select" && f.relation) data[f.name] = Number(data[f.name]);

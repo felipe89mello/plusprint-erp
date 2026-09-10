@@ -269,3 +269,22 @@ class Visita(Base):
     criado_em = Column(DateTime, default=datetime.utcnow)
 
     cliente = relationship("Cliente")
+
+
+class ContaPagar(Base):
+    """Compromisso de pagamento futuro — ex: peça/equipamento comprado de um
+    fornecedor pra revender, boleto a pagar, etc. Diferente de Despesa
+    (que é um gasto já lançado): aqui o que importa é o vencimento e se já
+    foi pago ou não."""
+
+    __tablename__ = "contas_pagar"
+
+    id = Column(Integer, primary_key=True, index=True)
+    descricao = Column(String(250), nullable=False)
+    fornecedor = Column(String(150), nullable=True)
+    valor = Column(Numeric(10, 2), nullable=False)
+    data_vencimento = Column(Date, nullable=False)
+    pago = Column(Boolean, default=False, nullable=False)
+    data_pagamento = Column(DateTime, nullable=True)
+    observacoes = Column(Text, nullable=True)
+    criado_em = Column(DateTime, default=datetime.utcnow)

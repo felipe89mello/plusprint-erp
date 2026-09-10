@@ -639,6 +639,19 @@ tbody tr[data-open-os] { cursor: pointer; }
 
 .field textarea { resize: vertical; min-height: 60px; }
 
+.field-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+.field-checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -652,6 +665,17 @@ tbody tr[data-open-os] { cursor: pointer; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.dashboard-duas-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 24px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-duas-colunas { grid-template-columns: 1fr; }
 }
 
 .picker-row {

@@ -1586,7 +1586,7 @@ async function openOrcamentoModal(existingItem) {
     const ehVenda = tipo === "venda_equipamento";
     document.getElementById("campo-garantia-dias").classList.toggle("hidden", ehVenda);
     document.getElementById("campo-prazo-entrega-geral").classList.toggle("hidden", ehVenda);
-    document.getElementById("label-transporte").textContent = ehVenda ? "Entrega/instalação por conta de" : "Transporte por conta de";
+    document.getElementById("label-transporte").textContent = ehVenda ? "Frete/instalação por conta de" : "Transporte por conta de";
   }
   document.getElementById("orcamento-tipo").addEventListener("change", toggleSecaoPorTipo);
   toggleSecaoPorTipo();

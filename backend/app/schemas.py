@@ -89,6 +89,7 @@ class OrdemServicoBase(BaseModel):
     numero: Optional[str] = None
     cliente_id: int
     orcamento_id: Optional[int] = None  # orçamento que originou esta OS, se houver
+    nota_fiscal_id: Optional[int] = None  # NF vinculada, se houver (opcional)
     descricao: str
     status: str = "aberto"
 
@@ -103,6 +104,7 @@ class OrdemServicoCreate(OrdemServicoBase):
 class OrdemServicoUpdate(BaseModel):
     numero: Optional[str] = None
     orcamento_id: Optional[int] = None
+    nota_fiscal_id: Optional[int] = None
     descricao: Optional[str] = None
     status: Optional[str] = None
     data_abertura: Optional[datetime] = None
@@ -220,6 +222,7 @@ class OrcamentoBase(BaseModel):
     tecnico_responsavel: Optional[str] = None
     status: str = "pendente"
     pago: bool = False
+    nota_fiscal_id: Optional[int] = None  # NF vinculada, se houver (opcional)
 
 
 class OrcamentoCreate(OrcamentoBase):
@@ -243,6 +246,7 @@ class OrcamentoUpdate(BaseModel):
     responsabilidade_transporte: Optional[str] = None
     tecnico_responsavel: Optional[str] = None
     status: Optional[str] = None
+    nota_fiscal_id: Optional[int] = None
     itens: Optional[list[ItemOrcamentoCreate]] = None
     equipamentos: Optional[list[OrcamentoEquipamentoItem]] = None
     itens_venda: Optional[list[ItemVendaEquipamentoCreate]] = None
@@ -574,3 +578,62 @@ class UsuarioOut(BaseModel):
     ativo: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------- Nota Fiscal ----------
+
+class NotaFiscalBase(BaseModel):
+    tipo: str  # nfe_entrada | nfe_saida | nfse_prestada
+    chave_acesso: Optional[str] = None
+    numero: Optional[str] = None
+    serie: Optional[str] = None
+    data_emissao: date
+    valor_total: Decimal
+    emitente_cnpj: Optional[str] = None
+    emitente_nome: Optional[str] = None
+    destinatario_cnpj: Optional[str] = None
+    destinatario_nome: Optional[str] = None
+    origem: str = "upload"  # upload | dfe
+    observacoes: Optional[str] = None
+
+
+class NotaFiscalCreate(NotaFiscalBase):
+    xml: Optional[str] = None
+
+
+class NotaFiscalUpdate(BaseModel):
+    tipo: Optional[str] = None
+    chave_acesso: Optional[str] = None
+    numero: Optional[str] = None
+    serie: Optional[str] = None
+    data_emissao: Optional[date] = None
+    valor_total: Optional[Decimal] = None
+    emitente_cnpj: Optional[str] = None
+    emitente_nome: Optional[str] = None
+    destinatario_cnpj: Optional[str] = None
+    destinatario_nome: Optional[str] = None
+    observacoes: Optional[str] = None
+    xml: Optional[str] = None
+
+
+class NotaFiscalOut(NotaFiscalBase):
+    """O XML completo não vai na listagem (pesaria à toa) — só um indicador
+    'tem_xml'; o conteúdo sai pelo endpoint /notas-fiscais/{id}/xml."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    criado_em: Optional[datetime] = None
+    tem_xml: bool = False
+    orcamento_ids: list[int] = []
+    ordem_servico_ids: list[int] = []
+
+    @classmethod
+    def from_model(cls, nota):
+        data = {c: getattr(nota, c) for c in NotaFiscalBase.model_fields}
+        data["origem"] = data.get("origem") or "upload"
+        data["id"] = nota.id
+        data["criado_em"] = nota.criado_em
+        data["tem_xml"] = bool(nota.xml)
+        data["orcamento_ids"] = [o.id for o in nota.orcamentos]
+        data["ordem_servico_ids"] = [o.id for o in nota.ordens_servico]
+        return cls(**data)

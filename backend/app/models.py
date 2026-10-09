@@ -68,10 +68,12 @@ class OrdemServico(Base):
     status = Column(String(30), default="aberto")  # aberto | em_andamento | concluido
     data_abertura = Column(DateTime, default=datetime.utcnow)
     data_conclusao = Column(DateTime, nullable=True)
+    nota_fiscal_id = Column(Integer, ForeignKey("notas_fiscais.id", ondelete="SET NULL"), nullable=True)  # NF emitida p/ esta OS, se houver
 
     cliente = relationship("Cliente", back_populates="ordens_servico")
     equipamentos = relationship("Equipamento", secondary=ordem_servico_equipamento, back_populates="ordens_servico")
     orcamento = relationship("Orcamento", back_populates="ordens_servico")
+    nota_fiscal = relationship("NotaFiscal", back_populates="ordens_servico")
     itens_peca = relationship("ItemPecaOS", back_populates="ordem_servico", cascade="all, delete-orphan")
     itens_servico = relationship("ItemServicoOS", back_populates="ordem_servico", cascade="all, delete-orphan")
 
@@ -99,8 +101,10 @@ class Orcamento(Base):
     data = Column(DateTime, default=datetime.utcnow)
     pago = Column(Boolean, default=False)
     data_pagamento = Column(DateTime, nullable=True)
+    nota_fiscal_id = Column(Integer, ForeignKey("notas_fiscais.id", ondelete="SET NULL"), nullable=True)  # NF emitida p/ este orçamento, se houver
 
     cliente = relationship("Cliente", back_populates="orcamentos")
+    nota_fiscal = relationship("NotaFiscal", back_populates="orcamentos")
     itens_equipamento = relationship("OrcamentoEquipamento", back_populates="orcamento", cascade="all, delete-orphan")
     ordens_servico = relationship("OrdemServico", back_populates="orcamento")
     itens = relationship("ItemOrcamento", back_populates="orcamento", cascade="all, delete-orphan")
@@ -288,3 +292,33 @@ class ContaPagar(Base):
     data_pagamento = Column(DateTime, nullable=True)
     observacoes = Column(Text, nullable=True)
     criado_em = Column(DateTime, default=datetime.utcnow)
+
+
+class NotaFiscal(Base):
+    """Nota fiscal registrada no ERP: compra de fornecedor (NF-e de entrada),
+    venda de equipamento/peça (NF-e do Sebrae) ou serviço prestado (NFS-e do
+    Portal do MEI). Existe por conta própria — vincular a orçamento/OS é
+    opcional, porque nem todo serviço tem nota e nem toda nota tem OS."""
+
+    __tablename__ = "notas_fiscais"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tipo = Column(String(20), nullable=False)  # nfe_entrada | nfe_saida | nfse_prestada
+    chave_acesso = Column(String(60), unique=True, nullable=True)  # evita cadastrar a mesma nota duas vezes
+    numero = Column(String(20), nullable=True)
+    serie = Column(String(10), nullable=True)
+    data_emissao = Column(Date, nullable=False)
+    valor_total = Column(Numeric(12, 2), nullable=False)
+
+    emitente_cnpj = Column(String(20), nullable=True)
+    emitente_nome = Column(String(150), nullable=True)
+    destinatario_cnpj = Column(String(20), nullable=True)  # na NFS-e, é o tomador do serviço
+    destinatario_nome = Column(String(150), nullable=True)
+
+    xml = Column(Text, nullable=True)  # XML completo, guardado como texto
+    origem = Column(String(20), default="upload")  # upload | dfe (consulta automática, passo 3)
+    observacoes = Column(Text, nullable=True)
+    criado_em = Column(DateTime, default=datetime.utcnow)
+
+    orcamentos = relationship("Orcamento", back_populates="nota_fiscal")
+    ordens_servico = relationship("OrdemServico", back_populates="nota_fiscal")

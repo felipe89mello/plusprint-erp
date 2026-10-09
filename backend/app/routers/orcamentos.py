@@ -65,6 +65,8 @@ def _substituir_equipamentos(
 def criar_orcamento(orcamento: schemas.OrcamentoCreate, db: Session = Depends(get_db)):
     if not db.get(models.Cliente, orcamento.cliente_id):
         raise HTTPException(status_code=400, detail="Cliente informado não existe")
+    if orcamento.nota_fiscal_id and not db.get(models.NotaFiscal, orcamento.nota_fiscal_id):
+        raise HTTPException(status_code=400, detail="Nota fiscal informada não existe")
 
     dados = orcamento.model_dump(exclude={"itens", "equipamentos", "itens_venda"})
     novo = models.Orcamento(**dados)
@@ -111,6 +113,8 @@ def atualizar_orcamento(orcamento_id: int, dados: schemas.OrcamentoUpdate, db: S
     orcamento = db.get(models.Orcamento, orcamento_id)
     if not orcamento:
         raise HTTPException(status_code=404, detail="Orçamento não encontrado")
+    if dados.nota_fiscal_id and not db.get(models.NotaFiscal, dados.nota_fiscal_id):
+        raise HTTPException(status_code=400, detail="Nota fiscal informada não existe")
 
     campos = dados.model_dump(exclude_unset=True, exclude={"itens", "equipamentos", "itens_venda"})
     for campo, valor in campos.items():

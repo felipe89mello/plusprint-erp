@@ -38,6 +38,8 @@ def criar_ordem_servico(os_: schemas.OrdemServicoCreate, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Cliente informado não existe")
     if os_.orcamento_id and not db.get(models.Orcamento, os_.orcamento_id):
         raise HTTPException(status_code=400, detail="Orçamento informado não existe")
+    if os_.nota_fiscal_id and not db.get(models.NotaFiscal, os_.nota_fiscal_id):
+        raise HTTPException(status_code=400, detail="Nota fiscal informada não existe")
 
     dados = os_.model_dump(exclude={"itens_servico", "equipamento_ids"})
     if dados.get("data_abertura") is None:
@@ -83,6 +85,8 @@ def atualizar_ordem_servico(os_id: int, dados: schemas.OrdemServicoUpdate, db: S
     os_ = db.get(models.OrdemServico, os_id)
     if not os_:
         raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
+    if dados.nota_fiscal_id and not db.get(models.NotaFiscal, dados.nota_fiscal_id):
+        raise HTTPException(status_code=400, detail="Nota fiscal informada não existe")
 
     campos = dados.model_dump(exclude_unset=True, exclude={"itens_servico", "equipamento_ids"})
     for campo, valor in campos.items():

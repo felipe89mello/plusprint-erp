@@ -85,7 +85,11 @@
   <main class="content">
     <header class="content-header">
       <h1 id="view-title">Dashboard</h1>
-      <button class="btn btn-primary" id="btn-novo">+ Novo</button>
+      <div class="header-actions">
+        <button class="btn hidden" id="btn-importar-xml">Importar XML</button>
+        <input type="file" id="input-xml" accept=".xml,text/xml,application/xml" class="hidden">
+        <button class="btn btn-primary" id="btn-novo">+ Novo</button>
+      </div>
     </header>
 
     <div id="alert-box" class="alert-box hidden"></div>

@@ -843,3 +843,18 @@ tbody tr[data-open-os] { cursor: pointer; }
 }
 
 .btn-os:hover { opacity: 0.9; }
+
+/* ---------- Importação de XML (Notas Fiscais) ---------- */
+
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+.aviso-xml {
+  background: #FFF6E0;
+  color: #7A5A00;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.aviso-xml p { margin: 0 0 4px; }
+.aviso-xml p:last-child { margin-bottom: 0; }

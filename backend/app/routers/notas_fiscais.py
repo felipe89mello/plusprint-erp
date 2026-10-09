@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app import models, schemas
+from app import models, nota_xml, schemas
 from app.database import get_db
 
 router = APIRouter(prefix="/notas-fiscais", tags=["Notas Fiscais"])
@@ -34,6 +34,28 @@ def _checar_chave_duplicada(db: Session, chave: str | None, ignorar_id: int | No
             status_code=409,
             detail=f"Já existe uma nota com esta chave de acesso (nº {existente.numero or existente.id})",
         )
+
+
+@router.post("/xml/preview")
+def pre_visualizar_xml(corpo: schemas.NotaFiscalXmlIn, db: Session = Depends(get_db)):
+    """Lê o XML e devolve os campos para preencher o formulário. NÃO salva nada.
+
+    Se a chave já existir no banco, avisa em `duplicada` para o frontend
+    bloquear a importação antes mesmo de abrir o formulário."""
+    try:
+        resultado = nota_xml.ler_xml(corpo.xml)
+    except nota_xml.XmlNotaError as erro:
+        raise HTTPException(status_code=422, detail=str(erro))
+
+    chave = resultado["campos"].get("chave_acesso")
+    existente = (
+        db.query(models.NotaFiscal).filter(models.NotaFiscal.chave_acesso == chave).first()
+        if chave else None
+    )
+    resultado["duplicada"] = (
+        {"id": existente.id, "numero": existente.numero} if existente else None
+    )
+    return resultado
 
 
 @router.post("/", response_model=schemas.NotaFiscalOut, status_code=201)

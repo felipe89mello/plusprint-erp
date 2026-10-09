@@ -1520,7 +1520,14 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
   const form = document.getElementById("modal-form");
   form.setAttribute("autocomplete", "off");
 
+  const avisosHtml =
+    prefillData && prefillData._avisos && prefillData._avisos.length
+      ? `<div class="aviso-xml">${prefillData._avisos.map((a) => `<p>${escHtml(a)}</p>`).join("")}</div>`
+      : "";
+  const veioDeXml = !isEdit && prefillData && prefillData._extra;
+
   form.innerHTML =
+    avisosHtml +
     config.fields
       .map((f) => {
         let currentValue = isEdit ? existingItem[f.name] : prefillData ? prefillData[f.name] : undefined;
@@ -1542,7 +1549,7 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
           return `<div class="field">
             <label>${f.label}${f.required ? " *" : ""}</label>
             <select name="${f.name}" ${f.required ? "required" : ""}>
-              ${f.relation ? `<option value="">Selecione...</option>` : ""}
+              ${f.relation || (veioDeXml && !valueAttr) ? `<option value="">Selecione...</option>` : ""}
               ${options.join("")}
             </select>
           </div>`;
@@ -1556,12 +1563,12 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
         if (f.type === "textarea") {
           return `<div class="field">
             <label>${f.label}${f.required ? " *" : ""}</label>
-            <textarea name="${f.name}" ${f.required ? "required" : ""}>${valueAttr}</textarea>
+            <textarea name="${f.name}" ${f.required ? "required" : ""}>${escHtml(valueAttr)}</textarea>
           </div>`;
         }
         return `<div class="field">
           <label>${f.label}${f.required ? " *" : ""}</label>
-          <input type="${f.type}" name="${f.name}" value="${valueAttr}" ${f.placeholder ? `placeholder="${f.placeholder}"` : ""} ${f.type === "number" ? 'step="0.01"' : ""} ${f.required ? "required" : ""}>
+          <input type="${f.type}" name="${f.name}" value="${escHtml(valueAttr)}" ${f.placeholder ? `placeholder="${f.placeholder}"` : ""} ${f.type === "number" ? 'step="0.01"' : ""} ${f.required ? "required" : ""}>
         </div>`;
       })
       .join("") +
@@ -1595,6 +1602,8 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
         await apiSend(`${config.endpoint}${existingItem.id}`, "PUT", data);
         showAlert("Registro atualizado com sucesso.", "success");
       } else {
+        // campos que não aparecem no formulário (ex.: o texto do XML importado)
+        if (veioDeXml) Object.assign(data, prefillData._extra);
         await apiSend(config.endpoint, "POST", data);
         showAlert("Registro criado com sucesso.", "success");
       }
@@ -2356,6 +2365,8 @@ function switchView(viewKey) {
   document.getElementById("view-title").textContent = config ? config.title : titulos[viewKey] || "";
   document.getElementById("btn-novo").classList.toggle("hidden", viewKey === "dashboard" || viewKey === "financeiro");
 
+  document.getElementById("btn-importar-xml").classList.toggle("hidden", viewKey !== "notas_fiscais");
+
   if (viewKey === "dashboard") renderDashboard();
   else if (viewKey === "financeiro") renderFinanceiro();
   else renderList(viewKey);
@@ -2375,6 +2386,51 @@ document.getElementById("btn-novo").addEventListener("click", () => {
   else if (currentView === "ordens") openOrdemModal(null);
   else openModal(currentView);
 });
+// ---------- Importar XML de nota fiscal ----------
+
+// Lê o arquivo como bytes e decodifica: UTF-8 primeiro (o normal em NF-e/NFS-e);
+// se tiver caracteres inválidos, tenta windows-1252 (alguns emissores antigos).
+async function lerArquivoTexto(file) {
+  const bytes = await file.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
+async function importarXmlNota(file) {
+  if (file.size > 2 * 1024 * 1024) {
+    showAlert("O arquivo é grande demais para ser uma nota fiscal (máximo 2 MB).");
+    return;
+  }
+  try {
+    const xml = await lerArquivoTexto(file);
+    const r = await apiSend("/notas-fiscais/xml/preview", "POST", { xml });
+    if (r.duplicada) {
+      const nome = r.duplicada.numero ? `nº ${r.duplicada.numero}` : `#${r.duplicada.id}`;
+      showAlert(`Esta nota já está cadastrada (${nome}). Nada foi importado.`);
+      return;
+    }
+    await openModal("notas_fiscais", null, {
+      ...r.campos,
+      _avisos: r.avisos,
+      _extra: { xml, origem: "upload" },
+    });
+  } catch (e) {
+    showAlert(e.message);
+  }
+}
+
+document.getElementById("btn-importar-xml").addEventListener("click", () => {
+  document.getElementById("input-xml").click();
+});
+document.getElementById("input-xml").addEventListener("change", (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = ""; // permite escolher o mesmo arquivo de novo depois
+  if (file) importarXmlNota(file);
+});
+
 document.getElementById("modal-close").addEventListener("click", closeModal);
 let modalMousedownNoOverlay = false;
 document.getElementById("modal-overlay").addEventListener("mousedown", (ev) => {

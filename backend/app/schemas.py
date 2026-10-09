@@ -637,3 +637,9 @@ class NotaFiscalOut(NotaFiscalBase):
         data["orcamento_ids"] = [o.id for o in nota.orcamentos]
         data["ordem_servico_ids"] = [o.id for o in nota.ordens_servico]
         return cls(**data)
+
+
+class NotaFiscalXmlIn(BaseModel):
+    """Corpo do envio de XML: o texto do arquivo, lido no navegador."""
+
+    xml: str

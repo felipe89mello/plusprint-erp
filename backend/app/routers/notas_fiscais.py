@@ -159,10 +159,13 @@ def sincronizar_dfe(db: Session = Depends(get_db)):
         raise HTTPException(status_code=429, detail=f"A SEFAZ pede para esperar. Tente de novo em cerca de {minutos} min.")
 
     resultado = {"novas": 0, "completadas": 0, "canceladas": 0, "ignoradas": 0, "mensagem": ""}
+    ultima = {"cstat": None, "motivo": None, "docs": 0}
     try:
         for _ in range(MAX_PAGINAS_POR_CONSULTA):
             r = dfe.consultar(empresa, ctrl.ultimo_nsu)
             ctrl.ultima_consulta = dfe.agora_utc()
+            ultima["cstat"], ultima["motivo"] = r["cstat"], r["motivo"]
+            ultima["docs"] += len(r["docs"])
 
             if r["cstat"] == "656":  # consumo indevido
                 ctrl.bloqueado_ate = dfe.agora_utc() + dfe.ESPERA_APOS_VAZIO
@@ -192,7 +195,10 @@ def sincronizar_dfe(db: Session = Depends(get_db)):
     if resultado["novas"]: partes.append(f"{resultado['novas']} nova(s)")
     if resultado["completadas"]: partes.append(f"{resultado['completadas']} completada(s) com XML")
     if resultado["canceladas"]: partes.append(f"{resultado['canceladas']} cancelada(s)")
-    resultado["mensagem"] = ("Consulta concluída: " + ", ".join(partes) + ".") if partes else "Consulta concluída: nenhuma nota nova."
+    if resultado["ignoradas"]: partes.append(f"{resultado['ignoradas']} ignorada(s) (canceladas ou emitidas por você)")
+    base = ("Consulta concluída: " + ", ".join(partes)) if partes else "Consulta concluída: nenhuma nota nova"
+    resultado["mensagem"] = f"{base}. SEFAZ: {ultima['cstat']} - {ultima['motivo']} ({ultima['docs']} documento(s) recebido(s))."
+    resultado["sefaz"] = ultima
     return resultado
 
 

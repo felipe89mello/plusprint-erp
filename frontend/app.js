@@ -157,6 +157,7 @@ const ENTITIES = {
       { key: "status", label: "Status", badge: true },
       { key: "data_abertura", label: "Data de abertura", date: true },
       { key: "data_conclusao", label: "Data de conclusão", date: true },
+      { key: "nota_fiscal_id", label: "NF", relation: "notas_fiscais", nfBadge: true }, // selo só aparece se houver nota vinculada
     ],
     fields: [
       { name: "cliente_id", label: "Cliente", type: "select", relation: "clientes", required: true },
@@ -185,6 +186,7 @@ const ENTITIES = {
       { key: "data", label: "Emissão", date: true },
       { key: "valor_total", label: "Valor", money: true },
       { key: "status", label: "Status", badge: true },
+      { key: "nota_fiscal_id", label: "NF", relation: "notas_fiscais", nfBadge: true }, // selo só aparece se houver nota vinculada
     ],
     fields: [], // sem uso — preload de relações feito manualmente em openOrcamentoModal
   },
@@ -300,6 +302,50 @@ const ENTITIES = {
       { name: "valor", label: "Valor (R$)", type: "number", required: true },
       { name: "data_vencimento", label: "Vencimento", type: "date", required: true },
       { name: "pago", label: "Já foi pago", type: "checkbox" },
+      { name: "observacoes", label: "Observações", type: "textarea" },
+    ],
+  },
+
+  notas_fiscais: {
+    title: "Notas Fiscais",
+    endpoint: "/notas-fiscais/",
+    filterKey: "tipo", // os botões de filtro usam o campo "tipo" (as demais telas usam "status")
+    statusFilters: [
+      { value: "nfse_prestada", label: "Serviços (NFS-e)" },
+      { value: "nfe_saida", label: "Vendas (NF-e)" },
+      { value: "nfe_entrada", label: "Compras (NF-e)" },
+    ],
+    searchFields: ["numero", "emitente_nome", "destinatario_nome", "chave_acesso"],
+    searchPlaceholder: "Buscar por nº, fornecedor, cliente, chave...",
+    columns: [
+      { key: "data_emissao", label: "Emissão", date: true },
+      { key: "tipo", label: "Tipo", nfTipo: true },
+      { key: "numero", label: "Nº" },
+      { key: "parte", label: "Fornecedor / Cliente", compute: (n) => escHtml(parteDaNota(n) || "—") },
+      { key: "valor_total", label: "Valor", money: true },
+      { key: "vinculos", label: "Vinculada a", compute: (n) => textoVinculosNota(n) },
+    ],
+    fields: [
+      {
+        name: "tipo",
+        label: "Tipo",
+        type: "select",
+        required: true,
+        options: [
+          { value: "nfse_prestada", label: "NFS-e — serviço prestado" },
+          { value: "nfe_saida", label: "NF-e — venda (emitida por mim)" },
+          { value: "nfe_entrada", label: "NF-e — compra (emitida por fornecedor)" },
+        ],
+      },
+      { name: "data_emissao", label: "Data de emissão", type: "date", required: true },
+      { name: "numero", label: "Número", type: "text" },
+      { name: "serie", label: "Série", type: "text" },
+      { name: "valor_total", label: "Valor total (R$)", type: "number", required: true },
+      { name: "emitente_nome", label: "Emitente (quem emitiu)", type: "text", placeholder: "ex: Plusprint Automação / nome do fornecedor" },
+      { name: "emitente_cnpj", label: "CNPJ do emitente", type: "text" },
+      { name: "destinatario_nome", label: "Destinatário / tomador (quem recebeu)", type: "text", placeholder: "ex: nome do cliente" },
+      { name: "destinatario_cnpj", label: "CNPJ/CPF do destinatário", type: "text" },
+      { name: "chave_acesso", label: "Chave de acesso (opcional)", type: "text", placeholder: "44 dígitos da NF-e — evita cadastrar a mesma nota duas vezes" },
       { name: "observacoes", label: "Observações", type: "textarea" },
     ],
   },
@@ -440,6 +486,58 @@ function formatTipoOrcamento(v) {
 const TIPO_ORCAMENTO_LABEL_CURTO = { venda_equipamento: "Venda de equipamento", desenvolvimento: "Desenvolvimento", tecnico: "Técnico" };
 function formatTipoOrcamentoCurto(v) {
   return TIPO_ORCAMENTO_LABEL_CURTO[v] || TIPO_ORCAMENTO_LABEL_CURTO.tecnico;
+}
+
+// ---------------------------------------------------------------
+// Notas fiscais — rótulos, selo "NF 1234" e opções do seletor
+// ---------------------------------------------------------------
+
+const NF_TIPO_LABEL = { nfse_prestada: "NFS-e serviço", nfe_saida: "NF-e venda", nfe_entrada: "NF-e compra" };
+
+// Nomes de fornecedor/cliente podem vir de fora (XML, digitação) e entram em
+// HTML montado por string — por isso passam por escHtml antes de ser exibidos.
+function escHtml(v) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Na compra (nfe_entrada) a "outra parte" é quem emitiu (fornecedor); nas
+// vendas e serviços é quem recebeu a nota (cliente).
+function parteDaNota(n) {
+  return n.tipo === "nfe_entrada" ? n.emitente_nome : n.destinatario_nome;
+}
+
+function textoVinculosNota(n) {
+  const partes = [];
+  if (n.orcamento_ids && n.orcamento_ids.length) partes.push(`${n.orcamento_ids.length} orç.`);
+  if (n.ordem_servico_ids && n.ordem_servico_ids.length) partes.push(`${n.ordem_servico_ids.length} OS`);
+  return partes.join(" · ") || "—";
+}
+
+function labelNotaFiscal(n) {
+  const quem = parteDaNota(n);
+  return `NF ${n.numero || "#" + n.id}${quem ? " — " + quem : ""} — ${formatMoney(n.valor_total)} (${formatDate(n.data_emissao)})`;
+}
+
+// Selo discreto "NF 1234" — só é desenhado quando existe vínculo (sem nota,
+// a célula fica vazia: não mostramos "sem NF" para não parecer pendência).
+function badgeNF(notaId) {
+  const nota = (cache.notas_fiscais || []).find((n) => n.id === notaId);
+  const texto = nota ? `NF ${nota.numero || "#" + nota.id}` : `NF #${notaId}`;
+  return `<span class="badge nf">${escHtml(texto)}</span>`;
+}
+
+// <option>s do seletor "Nota fiscal (opcional)" dos formulários. Compras
+// (nfe_entrada) ficam de fora, pois não se ligam a orçamento/OS — a não ser
+// que já seja a nota vinculada, para não "sumir" na edição.
+function notaFiscalOptionsHtml(selecionadaId) {
+  return (cache.notas_fiscais || [])
+    .filter((n) => n.tipo !== "nfe_entrada" || String(n.id) === String(selecionadaId))
+    .map((n) => `<option value="${n.id}" ${String(n.id) === String(selecionadaId) ? "selected" : ""}>${escHtml(labelNotaFiscal(n))}</option>`)
+    .join("");
 }
 
 function labelForItem(item) {
@@ -1204,7 +1302,8 @@ function applyFilters(viewKey, items) {
   const config = ENTITIES[viewKey];
   const state = filterState[viewKey] || {};
   let filtrados = items;
-  if (state.status) filtrados = filtrados.filter((i) => i.status === state.status);
+  const campoFiltro = config.filterKey || "status"; // Notas Fiscais filtra por "tipo"
+  if (state.status) filtrados = filtrados.filter((i) => i[campoFiltro] === state.status);
   if (state.busca) {
     const termo = state.busca.toLowerCase();
     filtrados = filtrados.filter((i) => itemTextoBuscavel(viewKey, config, i).includes(termo));
@@ -1263,7 +1362,11 @@ function renderTableInto(viewKey, allItems) {
       const cells = config.columns
         .map((c) => {
           let value = item[c.key];
+          // Selo "NF 1234": vem antes de c.relation, que devolveria o rótulo longo.
+          if (c.nfBadge) return `<td>${value != null ? badgeNF(value) : ""}</td>`;
           if (c.relation) value = relationLabel(c.relation, value);
+          else if (c.compute) value = c.compute(item);
+          else if (c.nfTipo) return `<td><span class="badge nf-${escHtml(value)}">${escHtml(NF_TIPO_LABEL[value] || value)}</span></td>`;
           else if (c.money) value = formatMoney(value);
           else if (c.date) value = formatDate(value);
           else if (c.tipoOrcamento) value = formatTipoOrcamento(value);
@@ -1430,7 +1533,12 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
             ? (cache[f.relation] || []).map(
                 (i) => `<option value="${i.id}" ${String(i.id) === valueAttr ? "selected" : ""}>${labelForItem(i)}</option>`
               )
-            : f.options.map((o) => `<option value="${o}" ${o === valueAttr ? "selected" : ""}>${o}</option>`);
+            : f.options.map((o) => {
+                // opção pode ser só um texto ("mensal") ou { value, label } quando o valor salvo difere do rótulo
+                const val = typeof o === "object" ? o.value : o;
+                const lab = typeof o === "object" ? o.label : o;
+                return `<option value="${val}" ${val === valueAttr ? "selected" : ""}>${lab}</option>`;
+              });
           return `<div class="field">
             <label>${f.label}${f.required ? " *" : ""}</label>
             <select name="${f.name}" ${f.required ? "required" : ""}>
@@ -1549,7 +1657,7 @@ function attachItemListeners(formEl) {
 }
 
 async function openOrcamentoModal(existingItem) {
-  await preloadRelations({ columns: [{ relation: "clientes" }, { relation: "equipamentos" }], fields: [] });
+  await preloadRelations({ columns: [{ relation: "clientes" }, { relation: "equipamentos" }, { relation: "notas_fiscais" }], fields: [] });
 
   const isEdit = existingItem != null;
   document.getElementById("modal-title").textContent = `${isEdit ? "Editar" : "Novo"} — Orçamento`;
@@ -1667,6 +1775,10 @@ async function openOrcamentoModal(existingItem) {
       <select name="status">
         ${["pendente", "aprovado", "recusado"].map((s) => `<option value="${s}" ${v("status", "pendente") === s ? "selected" : ""}>${s}</option>`).join("")}
       </select>
+    </div>
+
+    <div class="field"><label>Nota fiscal (opcional)</label>
+      <select name="nota_fiscal_id"><option value="">— sem nota —</option>${notaFiscalOptionsHtml(v("nota_fiscal_id"))}</select>
     </div>
 
     <div class="modal-actions">
@@ -1861,6 +1973,8 @@ async function openOrcamentoModal(existingItem) {
     else data.cliente_id = Number(data.cliente_id);
     if (data.data === "") delete data.data;
     ["validade_dias", "garantia_dias"].forEach((k) => { data[k] = Number(data[k]); });
+    // Nota fiscal é opcional: vazio vira null (e, na edição, isso desfaz o vínculo).
+    data.nota_fiscal_id = data.nota_fiscal_id ? Number(data.nota_fiscal_id) : null;
 
     syncEquipCardsFromDom();
     data.equipamentos = equipamentosSelecionados.map((e) => ({
@@ -2021,6 +2135,10 @@ async function openOrdemModal(existingItem, prefillData = null) {
       </select>
     </div>
 
+    <div class="field"><label>Nota fiscal (opcional)</label>
+      <select name="nota_fiscal_id"><option value="">— sem nota —</option>${notaFiscalOptionsHtml(v("nota_fiscal_id"))}</select>
+    </div>
+
     <label class="field-label-block">Serviços / Mão de obra</label>
     <table class="items-table">
       <thead><tr><th>Qtde./Hrs</th><th>Descrição</th><th>Unitário (R$)</th><th>Total</th><th></th></tr></thead>
@@ -2167,6 +2285,8 @@ async function openOrdemModal(existingItem, prefillData = null) {
     if (data.data_abertura === "") delete data.data_abertura;
     if (data.data_conclusao === "") delete data.data_conclusao;
     if (data.numero === "") delete data.numero;
+    // Nota fiscal é opcional: vazio vira null (e, na edição, isso desfaz o vínculo).
+    data.nota_fiscal_id = data.nota_fiscal_id ? Number(data.nota_fiscal_id) : null;
 
     data.equipamento_ids = equipamentosOS.map((e) => e.id);
 

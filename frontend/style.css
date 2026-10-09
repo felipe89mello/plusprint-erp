@@ -556,6 +556,11 @@ tbody tr[data-open-os] { cursor: pointer; }
 .badge.status-concluido, .badge.status-aprovado, .badge.status-pago, .badge.status-em_dia, .badge.status-realizada { background: #E9F3EC; color: var(--green); }
 .badge.status-recusado, .badge.status-encerrado, .badge.status-suspenso, .badge.status-atrasado, .badge.status-cancelada { background: #FBEAE7; color: var(--red); }
 
+/* Notas fiscais: selo "NF 1234" nas listas de Orçamentos/OS e tipo da nota */
+.badge.nf, .badge.nf-nfse_prestada { background: #E4EEF8; color: #2C5F8A; }
+.badge.nf-nfe_saida { background: #E9F3EC; color: var(--green); }
+.badge.nf-nfe_entrada { background: #F0F0EC; color: var(--ink-soft); }
+
 .empty-state {
   padding: 48px 20px;
   text-align: center;

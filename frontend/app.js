@@ -2366,6 +2366,7 @@ function switchView(viewKey) {
   document.getElementById("btn-novo").classList.toggle("hidden", viewKey === "dashboard" || viewKey === "financeiro");
 
   document.getElementById("btn-importar-xml").classList.toggle("hidden", viewKey !== "notas_fiscais");
+  document.getElementById("btn-sync-dfe").classList.toggle("hidden", viewKey !== "notas_fiscais");
 
   if (viewKey === "dashboard") renderDashboard();
   else if (viewKey === "financeiro") renderFinanceiro();
@@ -2409,6 +2410,15 @@ async function importarXmlNota(file) {
     const r = await apiSend("/notas-fiscais/xml/preview", "POST", { xml });
     if (r.duplicada) {
       const nome = r.duplicada.numero ? `nº ${r.duplicada.numero}` : `#${r.duplicada.id}`;
+      // Nota que veio da SEFAZ só como resumo (sem XML): em vez de barrar,
+      // completa a nota existente com o XML e os dados completos.
+      if (!r.duplicada.tem_xml && confirm(`A nota ${nome} já existe, mas só como resumo da SEFAZ. Anexar este XML a ela?`)) {
+        const dados = Object.fromEntries(Object.entries(r.campos).filter(([k, v]) => v != null && k !== "tipo"));
+        await apiSend(`/notas-fiscais/${r.duplicada.id}`, "PUT", { ...dados, xml });
+        showAlert(`Nota ${nome} completada com o XML.`, "success");
+        switchView("notas_fiscais");
+        return;
+      }
       showAlert(`Esta nota já está cadastrada (${nome}). Nada foi importado.`);
       return;
     }
@@ -2421,6 +2431,22 @@ async function importarXmlNota(file) {
     showAlert(e.message);
   }
 }
+
+document.getElementById("btn-sync-dfe").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-sync-dfe");
+  btn.disabled = true;
+  btn.textContent = "Consultando a SEFAZ...";
+  try {
+    const r = await apiSend("/notas-fiscais/dfe/sincronizar", "POST", {});
+    showAlert(r.mensagem, "success");
+    switchView("notas_fiscais");
+  } catch (e) {
+    showAlert(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Buscar compras (SEFAZ)";
+  }
+});
 
 document.getElementById("btn-importar-xml").addEventListener("click", () => {
   document.getElementById("input-xml").click();

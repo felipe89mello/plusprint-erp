@@ -322,3 +322,18 @@ class NotaFiscal(Base):
 
     orcamentos = relationship("Orcamento", back_populates="nota_fiscal")
     ordens_servico = relationship("OrdemServico", back_populates="nota_fiscal")
+
+
+class DfeControle(Base):
+    """Controle da consulta automática à SEFAZ (uma única linha, id=1).
+
+    ultimo_nsu: até onde já lemos — a próxima consulta pede só o que é novo.
+    bloqueado_ate: a SEFAZ exige esperar 1 hora quando não há nota nova."""
+
+    __tablename__ = "dfe_controle"
+
+    id = Column(Integer, primary_key=True)
+    ultimo_nsu = Column(String(15), nullable=False, default="000000000000000")
+    ultima_consulta = Column(DateTime, nullable=True)
+    bloqueado_ate = Column(DateTime, nullable=True)
+

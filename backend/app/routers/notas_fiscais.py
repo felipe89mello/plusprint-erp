@@ -1,8 +1,10 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app import models, nota_xml, schemas
+from app import dfe, models, nota_xml, schemas
 from app.database import get_db
 
 router = APIRouter(prefix="/notas-fiscais", tags=["Notas Fiscais"])
@@ -53,8 +55,144 @@ def pre_visualizar_xml(corpo: schemas.NotaFiscalXmlIn, db: Session = Depends(get
         if chave else None
     )
     resultado["duplicada"] = (
-        {"id": existente.id, "numero": existente.numero} if existente else None
+        {"id": existente.id, "numero": existente.numero, "tem_xml": bool(existente.xml)}
+        if existente else None
     )
+    return resultado
+
+
+# ---------------------------------------------------------------------------
+# Consulta automática de compras (Distribuição DF-e da SEFAZ)
+# ---------------------------------------------------------------------------
+
+MAX_PAGINAS_POR_CONSULTA = 5  # cada página traz até 50 documentos
+
+
+def _controle_dfe(db: Session) -> models.DfeControle:
+    ctrl = db.get(models.DfeControle, 1)
+    if not ctrl:
+        ctrl = models.DfeControle(id=1, ultimo_nsu=dfe.NSU_ZERO)
+        db.add(ctrl)
+        db.commit()
+        db.refresh(ctrl)
+    return ctrl
+
+
+@router.get("/dfe/status")
+def status_dfe(db: Session = Depends(get_db)):
+    ctrl = _controle_dfe(db)
+    agora = dfe.agora_utc()
+    espera = ctrl.bloqueado_ate and ctrl.bloqueado_ate > agora
+    return {
+        "configurado": bool(nota_xml.cnpj_da_empresa()) and os.path.isfile(dfe.caminho_certificado()),
+        "ultima_consulta": ctrl.ultima_consulta,
+        "pode_consultar_em": ctrl.bloqueado_ate if espera else None,
+    }
+
+
+def _gravar_documento(db: Session, doc: dict, empresa: str, resultado: dict):
+    schema = doc["schema"]
+    xml = doc["xml"]
+
+    if schema.startswith("resNFe"):
+        r = dfe.ler_resumo_nfe(xml)
+        if r is None:
+            resultado["ignoradas"] += 1
+            return
+        if r["emitente_cnpj"] == empresa:
+            resultado["ignoradas"] += 1  # nota emitida por nós: não é compra
+            return
+        if db.query(models.NotaFiscal).filter(models.NotaFiscal.chave_acesso == r["chave_acesso"]).first():
+            return
+        db.add(models.NotaFiscal(
+            tipo="nfe_entrada", origem="dfe", destinatario_cnpj=empresa,
+            observacoes="Resumo recebido da SEFAZ. O XML completo ainda não está disponível; "
+                        "quando tiver, use Importar XML para completar.",
+            **r,
+        ))
+        resultado["novas"] += 1
+
+    elif schema.startswith("procNFe"):
+        try:
+            lida = nota_xml.ler_xml(xml)["campos"]
+        except nota_xml.XmlNotaError:
+            resultado["ignoradas"] += 1
+            return
+        if lida["emitente_cnpj"] == empresa:
+            resultado["ignoradas"] += 1
+            return
+        lida["tipo"] = "nfe_entrada"
+        existente = db.query(models.NotaFiscal).filter(
+            models.NotaFiscal.chave_acesso == lida["chave_acesso"]).first()
+        if existente:
+            if not existente.xml:  # promove o resumo a nota completa
+                for campo, valor in lida.items():
+                    if valor is not None:
+                        setattr(existente, campo, valor)
+                existente.xml = xml
+                existente.observacoes = lida.get("observacoes")
+                resultado["completadas"] += 1
+            return
+        db.add(models.NotaFiscal(origem="dfe", xml=xml, **lida))
+        resultado["novas"] += 1
+
+    elif schema.startswith(("resEvento", "procEventoNFe")):
+        chave = dfe.chave_de_evento_cancelamento(xml)
+        if chave:
+            nota = db.query(models.NotaFiscal).filter(models.NotaFiscal.chave_acesso == chave).first()
+            if nota and "CANCELADA" not in (nota.observacoes or ""):
+                nota.observacoes = "[CANCELADA] " + (nota.observacoes or "")
+                resultado["canceladas"] += 1
+
+
+@router.post("/dfe/sincronizar")
+def sincronizar_dfe(db: Session = Depends(get_db)):
+    """Busca na SEFAZ as notas emitidas para a empresa e cadastra as novas."""
+    empresa = nota_xml.cnpj_da_empresa()
+    if not empresa:
+        raise HTTPException(status_code=400, detail="O CNPJ da empresa (EMPRESA_CNPJ) não está configurado no servidor.")
+
+    ctrl = _controle_dfe(db)
+    agora = dfe.agora_utc()
+    if ctrl.bloqueado_ate and ctrl.bloqueado_ate > agora:
+        minutos = int((ctrl.bloqueado_ate - agora).total_seconds() // 60) + 1
+        raise HTTPException(status_code=429, detail=f"A SEFAZ pede para esperar. Tente de novo em cerca de {minutos} min.")
+
+    resultado = {"novas": 0, "completadas": 0, "canceladas": 0, "ignoradas": 0, "mensagem": ""}
+    try:
+        for _ in range(MAX_PAGINAS_POR_CONSULTA):
+            r = dfe.consultar(empresa, ctrl.ultimo_nsu)
+            ctrl.ultima_consulta = dfe.agora_utc()
+
+            if r["cstat"] == "656":  # consumo indevido
+                ctrl.bloqueado_ate = dfe.agora_utc() + dfe.ESPERA_APOS_VAZIO
+                db.commit()
+                raise HTTPException(status_code=429, detail="A SEFAZ bloqueou novas consultas por 1 hora (consumo indevido).")
+            if r["cstat"] == "137":  # nada novo
+                ctrl.bloqueado_ate = dfe.agora_utc() + dfe.ESPERA_APOS_VAZIO
+                db.commit()
+                break
+            if r["cstat"] != "138":
+                db.commit()
+                raise HTTPException(status_code=502, detail=f"Resposta da SEFAZ: {r['cstat']} - {r['motivo']}")
+
+            for doc in r["docs"]:
+                _gravar_documento(db, doc, empresa, resultado)
+            ctrl.ultimo_nsu = r["ult_nsu"] or ctrl.ultimo_nsu
+            db.commit()  # guarda o progresso a cada página
+            if not r["max_nsu"] or r["ult_nsu"] == r["max_nsu"]:
+                ctrl.bloqueado_ate = dfe.agora_utc() + dfe.ESPERA_APOS_VAZIO
+                db.commit()
+                break
+    except dfe.DfeError as erro:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=str(erro))
+
+    partes = []
+    if resultado["novas"]: partes.append(f"{resultado['novas']} nova(s)")
+    if resultado["completadas"]: partes.append(f"{resultado['completadas']} completada(s) com XML")
+    if resultado["canceladas"]: partes.append(f"{resultado['canceladas']} cancelada(s)")
+    resultado["mensagem"] = ("Consulta concluída: " + ", ".join(partes) + ".") if partes else "Consulta concluída: nenhuma nota nova."
     return resultado
 
 

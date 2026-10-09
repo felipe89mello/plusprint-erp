@@ -7,12 +7,15 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:5432/${POSTGRES_DB}
       SECRET_KEY: ${SECRET_KEY}
       EMPRESA_CNPJ: ${EMPRESA_CNPJ:-}
+      CERT_A1_SENHA: ${CERT_A1_SENHA:-}
+      DFE_UF: ${DFE_UF:-35}
     ports:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
       - ./backend/alembic.ini:/app/alembic.ini
       - ./backend/migrations:/app/migrations
+      - ./certs:/app/certs:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
   frontend:
     image: nginx:alpine

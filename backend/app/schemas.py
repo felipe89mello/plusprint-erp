@@ -643,3 +643,10 @@ class NotaFiscalXmlIn(BaseModel):
     """Corpo do envio de XML: o texto do arquivo, lido no navegador."""
 
     xml: str
+
+
+class NotaFiscalChaveIn(BaseModel):
+    """Chave de acesso de 44 dígitos (aceita com espaços ou pontos; só os dígitos contam)."""
+
+    chave: str
+

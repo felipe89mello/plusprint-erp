@@ -137,6 +137,21 @@ def montar_envelope(cnpj: str, ult_nsu: str) -> bytes:
     return xml.encode("utf-8")
 
 
+def montar_envelope_chave(cnpj: str, chave: str) -> bytes:
+    """Consulta de UMA nota pela chave de acesso (em vez de ler a fila por NSU)."""
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body>'
+        '<nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">'
+        '<nfeDadosMsg>'
+        '<distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">'
+        f"<tpAmb>{ambiente()}</tpAmb><cUFAutor>{uf_autor()}</cUFAutor><CNPJ>{cnpj}</CNPJ>"
+        f"<consChNFe><chNFe>{chave}</chNFe></consChNFe>"
+        "</distDFeInt></nfeDadosMsg></nfeDistDFeInteresse></soap12:Body></soap12:Envelope>"
+    )
+    return xml.encode("utf-8")
+
+
 def _sem_namespace(raiz: ET.Element) -> ET.Element:
     for el in raiz.iter():
         if isinstance(el.tag, str) and "}" in el.tag:
@@ -181,6 +196,11 @@ def interpretar_resposta(corpo: bytes) -> dict:
 def consultar(cnpj: str, ult_nsu: str, enviar=enviar_para_sefaz) -> dict:
     """Faz UMA consulta. `enviar` pode ser trocado nos testes."""
     return interpretar_resposta(enviar(montar_envelope(cnpj, ult_nsu)))
+
+
+def consultar_chave(cnpj: str, chave: str, enviar=enviar_para_sefaz) -> dict:
+    """Pergunta à SEFAZ por uma nota específica. Mesmo formato de retorno de `consultar`."""
+    return interpretar_resposta(enviar(montar_envelope_chave(cnpj, chave)))
 
 
 # ------------------------------------------------------ documentos recebidos

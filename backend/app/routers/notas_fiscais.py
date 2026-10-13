@@ -202,6 +202,46 @@ def sincronizar_dfe(db: Session = Depends(get_db)):
     return resultado
 
 
+@router.post("/dfe/chave")
+def buscar_por_chave_dfe(corpo: schemas.NotaFiscalChaveIn, db: Session = Depends(get_db)):
+    """Pergunta à SEFAZ por uma nota específica, pela chave de 44 dígitos.
+
+    Serve quando a consulta geral não trouxe a nota, ou quando você só tem a
+    chave (do DANFE). Não mexe no controle de NSU da consulta geral."""
+    empresa = nota_xml.cnpj_da_empresa()
+    if not empresa:
+        raise HTTPException(status_code=400, detail="O CNPJ da empresa (EMPRESA_CNPJ) não está configurado no servidor.")
+    chave = "".join(ch for ch in corpo.chave if ch.isdigit())
+    if len(chave) != 44:
+        raise HTTPException(status_code=422, detail="A chave de acesso precisa ter 44 dígitos.")
+
+    existente = db.query(models.NotaFiscal).filter(models.NotaFiscal.chave_acesso == chave).first()
+    if existente and existente.xml:
+        raise HTTPException(status_code=409, detail=f"Esta nota já está cadastrada (nº {existente.numero or existente.id}) com XML.")
+
+    try:
+        r = dfe.consultar_chave(empresa, chave)
+    except dfe.DfeError as erro:
+        raise HTTPException(status_code=502, detail=str(erro))
+
+    sefaz = f"SEFAZ: {r['cstat']} - {r['motivo']} ({len(r['docs'])} documento(s) recebido(s))."
+    if r["cstat"] != "138" or not r["docs"]:
+        raise HTTPException(status_code=404, detail=f"A SEFAZ não entregou esta nota. {sefaz}")
+
+    resultado = {"novas": 0, "completadas": 0, "canceladas": 0, "ignoradas": 0}
+    for doc in r["docs"]:
+        _gravar_documento(db, doc, empresa, resultado)
+    db.commit()
+
+    if resultado["novas"]:
+        msg = "Nota encontrada e cadastrada."
+    elif resultado["completadas"]:
+        msg = "Nota completada com o XML."
+    else:
+        msg = "A SEFAZ respondeu, mas a nota não foi cadastrada (já existia, é cancelada ou foi emitida por você)."
+    return {**resultado, "mensagem": f"{msg} {sefaz}", "sefaz": {"cstat": r["cstat"], "motivo": r["motivo"], "docs": len(r["docs"])}}
+
+
 @router.post("/", response_model=schemas.NotaFiscalOut, status_code=201)
 def criar_nota_fiscal(nota: schemas.NotaFiscalCreate, db: Session = Depends(get_db)):
     _validar_tipo(nota.tipo)

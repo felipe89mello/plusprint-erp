@@ -452,7 +452,9 @@ function showAlert(message, type = "error") {
   const box = document.getElementById("alert-box");
   box.textContent = message;
   box.className = `alert-box ${type}`;
-  setTimeout(() => box.classList.add("hidden"), 4000);
+  // mensagens longas (ex.: resposta da SEFAZ) ficam mais tempo na tela
+  clearTimeout(showAlert._timer);
+  showAlert._timer = setTimeout(() => box.classList.add("hidden"), message.length > 90 ? 15000 : 4000);
 }
 
 // ---------------------------------------------------------------
@@ -2367,6 +2369,7 @@ function switchView(viewKey) {
 
   document.getElementById("btn-importar-xml").classList.toggle("hidden", viewKey !== "notas_fiscais");
   document.getElementById("btn-sync-dfe").classList.toggle("hidden", viewKey !== "notas_fiscais");
+  document.getElementById("btn-dfe-chave").classList.toggle("hidden", viewKey !== "notas_fiscais");
 
   if (viewKey === "dashboard") renderDashboard();
   else if (viewKey === "financeiro") renderFinanceiro();
@@ -2445,6 +2448,22 @@ document.getElementById("btn-sync-dfe").addEventListener("click", async () => {
   } finally {
     btn.disabled = false;
     btn.textContent = "Buscar compras (SEFAZ)";
+  }
+});
+
+document.getElementById("btn-dfe-chave").addEventListener("click", async () => {
+  const chave = prompt("Chave de acesso da NF-e (44 dígitos):");
+  if (!chave) return;
+  const btn = document.getElementById("btn-dfe-chave");
+  btn.disabled = true;
+  try {
+    const r = await apiSend("/notas-fiscais/dfe/chave", "POST", { chave });
+    showAlert(r.mensagem, "success");
+    switchView("notas_fiscais");
+  } catch (e) {
+    showAlert(e.message);
+  } finally {
+    btn.disabled = false;
   }
 });
 

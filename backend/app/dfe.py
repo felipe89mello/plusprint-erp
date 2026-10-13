@@ -22,7 +22,9 @@ resposta. Quem grava é o router (assim dá para testar sem rede).
 """
 import base64
 import gzip
+import logging
 import os
+import re
 import ssl
 import tempfile
 import urllib.error
@@ -30,8 +32,11 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
+log = logging.getLogger("dfe")
+
 URL_PRODUCAO = "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx"
 URL_HOMOLOGACAO = "https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx"
+base64re = re.compile(r"<docZip.*?</docZip>", re.S)
 NSU_ZERO = "000000000000000"
 ESPERA_APOS_VAZIO = timedelta(hours=1)
 
@@ -193,14 +198,26 @@ def interpretar_resposta(corpo: bytes) -> dict:
     }
 
 
+def _registrar(tipo: str, corpo: bytes) -> None:
+    """Guarda no log do servidor a resposta bruta da SEFAZ (sem os documentos
+    compactados), para diagnosticar: docker compose logs api | grep DFE."""
+    texto = corpo.decode("utf-8", errors="replace")
+    texto = base64re.sub("<docZip…/>", texto)
+    log.warning("DFE %s resposta: %s", tipo, texto[:1500])
+
+
 def consultar(cnpj: str, ult_nsu: str, enviar=enviar_para_sefaz) -> dict:
     """Faz UMA consulta. `enviar` pode ser trocado nos testes."""
-    return interpretar_resposta(enviar(montar_envelope(cnpj, ult_nsu)))
+    corpo = enviar(montar_envelope(cnpj, ult_nsu))
+    _registrar("nsu", corpo)
+    return interpretar_resposta(corpo)
 
 
 def consultar_chave(cnpj: str, chave: str, enviar=enviar_para_sefaz) -> dict:
     """Pergunta à SEFAZ por uma nota específica. Mesmo formato de retorno de `consultar`."""
-    return interpretar_resposta(enviar(montar_envelope_chave(cnpj, chave)))
+    corpo = enviar(montar_envelope_chave(cnpj, chave))
+    _registrar("chave", corpo)
+    return interpretar_resposta(corpo)
 
 
 # ------------------------------------------------------ documentos recebidos

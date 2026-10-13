@@ -165,6 +165,7 @@ def sincronizar_dfe(db: Session = Depends(get_db)):
             r = dfe.consultar(empresa, ctrl.ultimo_nsu)
             ctrl.ultima_consulta = dfe.agora_utc()
             ultima["cstat"], ultima["motivo"] = r["cstat"], r["motivo"]
+            ultima["ult_nsu"], ultima["max_nsu"] = r["ult_nsu"], r["max_nsu"]
             ultima["docs"] += len(r["docs"])
 
             if r["cstat"] == "656":  # consumo indevido
@@ -197,7 +198,7 @@ def sincronizar_dfe(db: Session = Depends(get_db)):
     if resultado["canceladas"]: partes.append(f"{resultado['canceladas']} cancelada(s)")
     if resultado["ignoradas"]: partes.append(f"{resultado['ignoradas']} ignorada(s) (canceladas ou emitidas por você)")
     base = ("Consulta concluída: " + ", ".join(partes)) if partes else "Consulta concluída: nenhuma nota nova"
-    resultado["mensagem"] = f"{base}. SEFAZ: {ultima['cstat']} - {ultima['motivo']} ({ultima['docs']} documento(s) recebido(s))."
+    resultado["mensagem"] = f"{base}. SEFAZ: {ultima['cstat']} - {ultima['motivo']} ({ultima['docs']} documento(s) recebido(s)). NSU: {ultima.get('ult_nsu')} / máx {ultima.get('max_nsu')}."
     resultado["sefaz"] = ultima
     return resultado
 
@@ -224,7 +225,7 @@ def buscar_por_chave_dfe(corpo: schemas.NotaFiscalChaveIn, db: Session = Depends
     except dfe.DfeError as erro:
         raise HTTPException(status_code=502, detail=str(erro))
 
-    sefaz = f"SEFAZ: {r['cstat']} - {r['motivo']} ({len(r['docs'])} documento(s) recebido(s))."
+    sefaz = f"SEFAZ: {r['cstat']} - {r['motivo']} ({len(r['docs'])} documento(s) recebido(s)). NSU: {r['ult_nsu']} / máx {r['max_nsu']}."
     if r["cstat"] != "138" or not r["docs"]:
         raise HTTPException(status_code=404, detail=f"A SEFAZ não entregou esta nota. {sefaz}")
 

@@ -95,6 +95,13 @@ document.getElementById("login-form").addEventListener("submit", async (ev) => {
 // motor genérico (renderList, openModal) lê essa configuração.
 // ---------------------------------------------------------------
 
+const CATEGORIA_PECA_LABEL = {
+  impressora: "Impressoras",
+  peca_zebra: "Peças Zebra",
+  peca_argox: "Peças Argox",
+  outros: "Outros",
+};
+
 const ENTITIES = {
   clientes: {
     title: "Clientes",
@@ -216,11 +223,19 @@ const ENTITIES = {
     title: "Peças / Estoque",
     endpoint: "/pecas/",
     sort: compareNome,
+    filterKey: "categoria", // os botões de filtro separam o estoque por categoria
+    statusFilters: [
+      { value: "impressora", label: "Impressoras" },
+      { value: "peca_zebra", label: "Peças Zebra" },
+      { value: "peca_argox", label: "Peças Argox" },
+      { value: "outros", label: "Outros" },
+    ],
     searchFields: ["nome", "partnumber", "marca", "modelo"],
     searchPlaceholder: "Buscar por nome, partnumber, marca...",
     columns: [
       { key: "id", label: "ID", mono: true },
       { key: "nome", label: "Nome" },
+      { key: "categoria", label: "Categoria", compute: (p) => escHtml(CATEGORIA_PECA_LABEL[p.categoria] || "—") },
       { key: "partnumber", label: "Partnumber", mono: true },
       { key: "marca", label: "Marca" },
       { key: "modelo", label: "Modelo" },
@@ -230,6 +245,19 @@ const ENTITIES = {
     ],
     fields: [
       { name: "nome", label: "Nome", type: "text", required: true },
+      {
+        name: "categoria",
+        label: "Categoria",
+        type: "select",
+        required: true,
+        selecione: true, // começa em "Selecione..." para não gravar a categoria errada sem querer
+        options: [
+          { value: "impressora", label: "Impressoras" },
+          { value: "peca_zebra", label: "Peças Zebra" },
+          { value: "peca_argox", label: "Peças Argox" },
+          { value: "outros", label: "Outros" },
+        ],
+      },
       { name: "partnumber", label: "Partnumber", type: "text" },
       { name: "marca", label: "Marca da impressora", type: "text", placeholder: "ex: Zebra" },
       { name: "modelo", label: "Modelo da impressora", type: "text", placeholder: "ex: ZT411" },
@@ -1551,7 +1579,7 @@ async function openModal(viewKey, existingItem = null, prefillData = null) {
           return `<div class="field">
             <label>${f.label}${f.required ? " *" : ""}</label>
             <select name="${f.name}" ${f.required ? "required" : ""}>
-              ${f.relation || (veioDeXml && !valueAttr) ? `<option value="">Selecione...</option>` : ""}
+              ${f.relation || f.selecione || (veioDeXml && !valueAttr) ? `<option value="">Selecione...</option>` : ""}
               ${options.join("")}
             </select>
           </div>`;

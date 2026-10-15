@@ -192,6 +192,7 @@ class Peca(Base):
     partnumber = Column(String(100), nullable=True)
     marca = Column(String(100), nullable=True)  # marca da impressora compatível
     modelo = Column(String(100), nullable=True)  # modelo da impressora compatível
+    categoria = Column(String(30), nullable=True)  # impressora | peca_zebra | peca_argox | outros
     quantidade_estoque = Column(Integer, nullable=False, default=0)
     valor_unitario = Column(Numeric(10, 2), nullable=False)  # preço de venda
     valor_compra = Column(Numeric(10, 2), nullable=True)  # quanto você pagou (custo)

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -324,11 +324,15 @@ class ContratoOut(ContratoBase):
 
 # ---------- Peça ----------
 
+CategoriaPeca = Literal["impressora", "peca_zebra", "peca_argox", "outros"]
+
+
 class PecaBase(BaseModel):
     nome: str
     partnumber: Optional[str] = None
     marca: Optional[str] = None
     modelo: Optional[str] = None
+    categoria: Optional[CategoriaPeca] = None
     quantidade_estoque: int = 0
     valor_unitario: Decimal
     valor_compra: Optional[Decimal] = None
@@ -343,6 +347,7 @@ class PecaUpdate(BaseModel):
     partnumber: Optional[str] = None
     marca: Optional[str] = None
     modelo: Optional[str] = None
+    categoria: Optional[CategoriaPeca] = None
     quantidade_estoque: Optional[int] = None
     valor_unitario: Optional[Decimal] = None
     valor_compra: Optional[Decimal] = None

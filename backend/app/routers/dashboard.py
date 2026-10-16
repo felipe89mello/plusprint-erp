@@ -9,8 +9,6 @@ from app.database import get_db
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-ESTOQUE_BAIXO_LIMITE = 5
-
 
 @router.get("/anos-disponiveis", response_model=list[int])
 def anos_disponiveis(db: Session = Depends(get_db)):
@@ -51,12 +49,6 @@ def obter_dashboard(ano: int | None = None, db: Session = Depends(get_db)):
         .scalar()
     )
 
-    pecas_com_estoque_baixo = (
-        db.query(models.Peca)
-        .filter(models.Peca.quantidade_estoque < ESTOQUE_BAIXO_LIMITE)
-        .all()
-    )
-
     return schemas.DashboardOut(
         ano=ano,
         os_abertas=contar_os("aberto"),
@@ -68,5 +60,4 @@ def obter_dashboard(ano: int | None = None, db: Session = Depends(get_db)):
         orcamentos_recusados=contar_orcamentos("recusado"),
         orcamentos_total=contar_orcamentos(),
         contratos_ativos=contratos_ativos,
-        pecas_com_estoque_baixo=pecas_com_estoque_baixo,
     )

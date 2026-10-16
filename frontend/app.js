@@ -224,6 +224,7 @@ const ENTITIES = {
     endpoint: "/pecas/",
     sort: compareNome,
     filterKey: "categoria", // os botões de filtro separam o estoque por categoria
+    ocultarSemEstoque: true, // a lista mostra só o que tem em estoque; botão revela as zeradas
     statusFilters: [
       { value: "impressora", label: "Impressoras" },
       { value: "peca_zebra", label: "Peças Zebra" },
@@ -646,28 +647,6 @@ function buildDashboardHtml(d) {
         <div class="metric-label">Contratos ativos</div>
         <div class="metric-value">${d.contratos_ativos}</div>
       </div>
-    </div>
-
-    <h3 class="panel-title">Peças com estoque baixo</h3>
-    <div class="table-wrap">
-      ${
-        d.pecas_com_estoque_baixo.length === 0
-          ? `<div class="empty-state">Nenhuma peça com estoque baixo no momento.</div>`
-          : `<table>
-              <thead><tr><th>Nome</th><th>Estoque</th><th>Valor unitário</th></tr></thead>
-              <tbody>
-                ${d.pecas_com_estoque_baixo
-                  .map(
-                    (p) => `<tr>
-                      <td>${p.nome}</td>
-                      <td class="mono" style="color:var(--red)">${p.quantidade_estoque}</td>
-                      <td class="mono">${formatMoney(p.valor_unitario)}</td>
-                    </tr>`
-                  )
-                  .join("")}
-              </tbody>
-            </table>`
-      }
     </div>
   `;
 }
@@ -1334,6 +1313,7 @@ function applyFilters(viewKey, items) {
   let filtrados = items;
   const campoFiltro = config.filterKey || "status"; // Notas Fiscais filtra por "tipo"
   if (state.status) filtrados = filtrados.filter((i) => i[campoFiltro] === state.status);
+  if (config.ocultarSemEstoque && !state.mostrarSemEstoque) filtrados = filtrados.filter((i) => Number(i.quantidade_estoque) > 0);
   if (state.busca) {
     const termo = state.busca.toLowerCase();
     filtrados = filtrados.filter((i) => itemTextoBuscavel(viewKey, config, i).includes(termo));
@@ -1349,11 +1329,16 @@ function buildFilterBarHtml(viewKey, config) {
         `<button type="button" class="filter-btn ${state.status === s.value ? "active" : ""}" data-filter-status="${s.value}">${s.label}</button>`
     )
     .join("");
+  let semEstoqueBtn = "";
+  if (config.ocultarSemEstoque) {
+    const zeradas = (cache[viewKey] || []).filter((i) => !(Number(i.quantidade_estoque) > 0)).length;
+    semEstoqueBtn = `<button type="button" class="filter-btn ${state.mostrarSemEstoque ? "active" : ""}" data-toggle-sem-estoque>Mostrar sem estoque (${zeradas})</button>`;
+  }
   const searchHtml =
     config.filterEmpresa || config.searchFields || config.searchCliente
       ? `<input type="text" id="filtro-busca" class="filter-search" placeholder="${config.searchPlaceholder || "Buscar..."}" value="${state.busca || ""}">`
       : "";
-  return `<div class="filter-bar">${statusBtns}${searchHtml}</div>`;
+  return `<div class="filter-bar">${statusBtns}${semEstoqueBtn}${searchHtml}</div>`;
 }
 
 function wireFilterBar(viewKey) {
@@ -1365,6 +1350,14 @@ function wireFilterBar(viewKey) {
       renderTableInto(viewKey, cache[viewKey]);
     });
   });
+  const semEstoqueBtn = document.querySelector("[data-toggle-sem-estoque]");
+  if (semEstoqueBtn) {
+    semEstoqueBtn.addEventListener("click", () => {
+      filterState[viewKey].mostrarSemEstoque = !filterState[viewKey].mostrarSemEstoque;
+      semEstoqueBtn.classList.toggle("active", filterState[viewKey].mostrarSemEstoque);
+      renderTableInto(viewKey, cache[viewKey]);
+    });
+  }
   const searchInput = document.getElementById("filtro-busca");
   if (searchInput) {
     searchInput.addEventListener("input", () => {

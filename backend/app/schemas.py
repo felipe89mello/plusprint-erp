@@ -392,7 +392,6 @@ class DashboardOut(BaseModel):
     orcamentos_recusados: int
     orcamentos_total: int
     contratos_ativos: int
-    pecas_com_estoque_baixo: list[PecaOut]
 
 
 # ---------- Despesa ----------

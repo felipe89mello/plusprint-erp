@@ -234,7 +234,6 @@ const ENTITIES = {
     searchFields: ["nome", "partnumber", "marca", "modelo"],
     searchPlaceholder: "Buscar por nome, partnumber, marca...",
     columns: [
-      { key: "id", label: "ID", mono: true },
       { key: "nome", label: "Nome" },
       { key: "categoria", label: "Categoria", compute: (p) => escHtml(CATEGORIA_PECA_LABEL[p.categoria] || "—") },
       { key: "partnumber", label: "Partnumber", mono: true },

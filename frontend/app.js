@@ -222,7 +222,7 @@ const ENTITIES = {
   pecas: {
     title: "Peças / Estoque",
     endpoint: "/pecas/",
-    sort: compareNome,
+    sort: comparePeca,
     filterKey: "categoria", // os botões de filtro separam o estoque por categoria
     ocultarSemEstoque: true, // a lista mostra só o que tem em estoque; botão revela as zeradas
     statusFilters: [
@@ -235,10 +235,9 @@ const ENTITIES = {
     searchPlaceholder: "Buscar por nome, partnumber, marca...",
     columns: [
       { key: "nome", label: "Nome" },
-      { key: "categoria", label: "Categoria", compute: (p) => escHtml(CATEGORIA_PECA_LABEL[p.categoria] || "—") },
-      { key: "partnumber", label: "Partnumber", mono: true },
-      { key: "marca", label: "Marca" },
       { key: "modelo", label: "Modelo" },
+      { key: "marca", label: "Marca" },
+      { key: "partnumber", label: "Partnumber", mono: true },
       { key: "quantidade_estoque", label: "Estoque", mono: true, lowStock: true },
       { key: "valor_compra", label: "Custo (compra)", money: true },
       { key: "valor_unitario", label: "Valor de venda", money: true },
@@ -1259,6 +1258,12 @@ function compareNome(a, b) {
   return (a.nome || "").localeCompare(b.nome || "", "pt-BR", { sensitivity: "base" });
 }
 
+// Peças: ordem alfabética por nome; nomes iguais desempatam por modelo e depois por marca.
+function comparePeca(a, b) {
+  const cmp = (x, y) => (x || "").localeCompare(y || "", "pt-BR", { sensitivity: "base" });
+  return cmp(a.nome, b.nome) || cmp(a.modelo, b.modelo) || cmp(a.marca, b.marca);
+}
+
 function compareNumero(a, b) {
   if (!a.numero && !b.numero) return 0;
   if (!a.numero) return 1; // sem número vai para o fim
@@ -1309,7 +1314,7 @@ function itemTextoBuscavel(viewKey, config, item) {
 function applyFilters(viewKey, items) {
   const config = ENTITIES[viewKey];
   const state = filterState[viewKey] || {};
-  let filtrados = items;
+  let filtrados = config.sort ? [...items].sort(config.sort) : items; // mantém a ordem mesmo após editar/cadastrar
   const campoFiltro = config.filterKey || "status"; // Notas Fiscais filtra por "tipo"
   if (state.status) filtrados = filtrados.filter((i) => i[campoFiltro] === state.status);
   if (config.ocultarSemEstoque && !state.mostrarSemEstoque) filtrados = filtrados.filter((i) => Number(i.quantidade_estoque) > 0);

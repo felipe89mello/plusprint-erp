@@ -994,8 +994,55 @@ function buildFaturamentoChartSvg(pontos) {
   `;
 }
 
-function buildRankingHtml(ranking) {
-  if (ranking.length === 0) return `<div class="empty-state">Nenhum faturamento realizado ainda.</div>`;
+// Ranking "Faturamento por cliente": null = Total (todos os anos), ou um ano.
+let rankingAnoSelecionado = null;
+
+function buildRankingPanelHtml(anos, anoSelecionado, ranking) {
+  const estilo = "padding:6px 14px;font-size:12.5px";
+  const botoes =
+    anos
+      .map(
+        (a) =>
+          `<button type="button" class="btn ${a === anoSelecionado ? "btn-primary" : ""}" style="${estilo}" data-ano-ranking="${a}">${a}</button>`
+      )
+      .join("") +
+    `<button type="button" class="btn ${anoSelecionado === null ? "btn-primary" : ""}" style="${estilo}" data-ano-ranking="total">Total</button>`;
+  return `
+    <div class="panel-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span>Faturamento por cliente</span>
+      <span style="display:flex;gap:6px">${botoes}</span>
+    </div>
+    <div class="ranking-list">${buildRankingHtml(ranking, anoSelecionado)}</div>
+  `;
+}
+
+async function selecionarAnoRanking(anoOuNull) {
+  rankingAnoSelecionado = anoOuNull;
+  const wrap = document.getElementById("ranking-wrap");
+  if (!wrap) return;
+  try {
+    const qs = anoOuNull !== null ? `?ano=${anoOuNull}` : "";
+    const [anos, ranking] = await Promise.all([
+      apiGet("/financeiro/anos-disponiveis"),
+      apiGet(`/financeiro/por-cliente${qs}`),
+    ]);
+    wrap.innerHTML = buildRankingPanelHtml(anos, anoOuNull, ranking);
+    attachRankingListeners();
+  } catch (e) {
+    wrap.innerHTML = `<div class="empty-state">Não foi possível carregar o ranking.</div>`;
+  }
+}
+
+function attachRankingListeners() {
+  document.querySelectorAll("[data-ano-ranking]").forEach((btn) => {
+    const v = btn.dataset.anoRanking;
+    btn.addEventListener("click", () => selecionarAnoRanking(v === "total" ? null : Number(v)));
+  });
+}
+
+function buildRankingHtml(ranking, ano) {
+  if (ranking.length === 0)
+    return `<div class="empty-state">${ano ? `Nenhum faturamento realizado em ${ano}.` : "Nenhum faturamento realizado ainda."}</div>`;
   const max = Math.max(...ranking.map((r) => Number(r.faturamento_total)));
   return ranking
     .slice(0, 10)
@@ -1047,11 +1094,12 @@ async function renderFinanceiro() {
   root.innerHTML = `<div class="empty-state">Carregando indicadores...</div>`;
 
   try {
-    const [contas, anos, ranking] = await Promise.all([
+    const [contas, anos] = await Promise.all([
       apiGet("/financeiro/contas-a-receber"),
       apiGet("/financeiro/anos-disponiveis"),
-      apiGet("/financeiro/por-cliente"),
     ]);
+    if (rankingAnoSelecionado !== null && !anos.includes(rankingAnoSelecionado)) rankingAnoSelecionado = null;
+    const ranking = await apiGet(`/financeiro/por-cliente${rankingAnoSelecionado !== null ? `?ano=${rankingAnoSelecionado}` : ""}`);
 
     if (financeiroAnoSelecionado === null || !anos.includes(financeiroAnoSelecionado)) {
       financeiroAnoSelecionado = anos[anos.length - 1];
@@ -1090,8 +1138,7 @@ async function renderFinanceiro() {
 
       <div id="faturamento-chart-wrap">${buildFaturamentoPanelHtml(anos, financeiroAnoSelecionado, pontos)}</div>
 
-      <h3 class="panel-title">Faturamento por cliente</h3>
-      <div class="ranking-list">${buildRankingHtml(ranking)}</div>
+      <div id="ranking-wrap">${buildRankingPanelHtml(anos, rankingAnoSelecionado, ranking)}</div>
 
       <h3 class="panel-title" style="margin-top:28px">Contas a Receber</h3>
       <div id="contas-a-receber-wrap">${buildContasReceberHtml(contas)}</div>
@@ -1130,6 +1177,7 @@ async function renderFinanceiro() {
     });
 
     attachFaturamentoPanelListeners();
+    attachRankingListeners();
   } catch (e) {
     root.innerHTML = `<div class="empty-state">Não foi possível carregar os dados financeiros. A API está rodando?</div>`;
   }

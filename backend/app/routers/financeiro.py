@@ -370,21 +370,33 @@ def detalhe_mensal(ano: int, mes: int | None = None, db: Session = Depends(get_d
 
 
 @router.get("/por-cliente", response_model=list[schemas.ClienteRankingOut])
-def por_cliente(db: Session = Depends(get_db)):
+def por_cliente(ano: int | None = None, db: Session = Depends(get_db)):
     """Ranking de faturamento por cliente — só conta o que já foi
-    efetivamente realizado (OS concluída, ou venda de equipamento aprovada)."""
+    efetivamente realizado (OS concluída, ou venda de equipamento aprovada).
+
+    Sem `ano`, soma tudo (botão "Total"). Com `ano`, só entra o que foi
+    realizado naquele ano: a data de referência da venda de equipamento é a da
+    aprovação do orçamento; a do serviço técnico é a da conclusão da OS."""
     totais: dict[int, dict] = {}
 
     for o in db.query(models.Orcamento).filter(models.Orcamento.status == "aprovado").all():
         valor = Decimal("0")
+        data_ref = o.data
         if o.tipo == "venda_equipamento":
             valor = sum((i.quantidade * i.preco_unitario for i in o.itens_venda), Decimal("0"))
-        elif any(os_.status == "concluido" for os_ in o.ordens_servico):
-            valor = sum((i.quantidade * i.valor_unitario for i in o.itens), Decimal("0"))
+        else:
+            concluidas = [os_ for os_ in o.ordens_servico if os_.status == "concluido"]
+            if concluidas:
+                valor = sum((i.quantidade * i.valor_unitario for i in o.itens), Decimal("0"))
+                datas = [os_.data_conclusao for os_ in concluidas if os_.data_conclusao]
+                data_ref = max(datas) if datas else o.data
 
-        if valor > 0:
-            registro = totais.setdefault(o.cliente_id, {"nome": o.cliente.nome, "total": Decimal("0")})
-            registro["total"] += valor
+        if valor <= 0:
+            continue
+        if ano is not None and (data_ref is None or data_ref.year != ano):
+            continue
+        registro = totais.setdefault(o.cliente_id, {"nome": o.cliente.nome, "total": Decimal("0")})
+        registro["total"] += valor
 
     ranking = [
         schemas.ClienteRankingOut(cliente_id=cid, cliente_nome=v["nome"], faturamento_total=v["total"])

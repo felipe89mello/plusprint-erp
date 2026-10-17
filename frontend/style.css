@@ -477,6 +477,7 @@ body {
 }
 
 .ranking-bar-fill {
+  display: block; /* sem isso o <span> ignora largura/altura e a barra some */
   background: var(--amber);
   height: 100%;
   border-radius: 6px;

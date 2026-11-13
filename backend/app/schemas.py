@@ -515,6 +515,24 @@ class ContaReceberOut(BaseModel):
     pago: bool
     data_pagamento: Optional[datetime] = None
     situacao: str  # pago | em_dia | vence_em_breve | atrasado | aguardando_conclusao
+    # Só preenchidos quando o orçamento é pago em parcelas (ex: "30/60/90 DDL"):
+    # nesse caso cada linha é UMA parcela e `valor_total` é o valor dela.
+    parcela_id: Optional[int] = None
+    parcela_numero: Optional[int] = None
+    parcela_total: Optional[int] = None
+
+
+class ParcelaReceberUpdate(BaseModel):
+    pago: bool
+
+
+class ParcelaReceberOut(BaseModel):
+    id: int
+    orcamento_id: int
+    numero: int
+    pago: bool
+    data_pagamento: Optional[datetime] = None
+    orcamento_pago: bool  # true quando TODAS as parcelas do orçamento foram pagas
 
 
 class FaturamentoMensalPonto(BaseModel):

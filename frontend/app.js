@@ -747,7 +747,7 @@ function buildContasReceberPendentesDashboardHtml(contasReceber) {
       .map(
         (c) => `<tr>
           <td class="mono">${c.data_vencimento ? formatDate(c.data_vencimento) : "—"}</td>
-          <td>${c.cliente_nome}</td>
+          <td>${c.cliente_nome}${c.parcela_total ? ` <span class="mono" style="color:var(--ink-soft)">(parcela ${c.parcela_numero}/${c.parcela_total})</span>` : ""}</td>
           <td class="mono">${formatMoney(c.valor_total)}</td>
           <td><span class="badge status-${c.situacao}">${c.situacao.replace(/_/g, " ")}</span></td>
         </tr>`
@@ -1065,11 +1065,15 @@ function buildContasReceberHtml(contas) {
     .map((c) => {
       const badge = `<span class="badge status-${c.situacao}">${SITUACAO_LABEL[c.situacao] || c.situacao}</span>`;
       const venc = c.data_vencimento ? formatDate(c.data_vencimento) : "—";
+      // Pago em parcelas (ex: 30/60/90 DDL): cada linha é uma parcela e paga sozinha.
+      const attrDesmarcar = c.parcela_id ? `data-desmarcar-parcela="${c.parcela_id}"` : `data-desmarcar-pago="${c.orcamento_id}"`;
+      const attrMarcar = c.parcela_id ? `data-marcar-parcela="${c.parcela_id}"` : `data-marcar-pago="${c.orcamento_id}"`;
       const acao = c.pago
-        ? `<button class="btn btn-danger" data-desmarcar-pago="${c.orcamento_id}">Desfazer pagamento</button>`
-        : `<button class="btn btn-pagar" data-marcar-pago="${c.orcamento_id}">Marcar como pago</button>`;
+        ? `<button class="btn btn-danger" ${attrDesmarcar}>Desfazer pagamento</button>`
+        : `<button class="btn btn-pagar" ${attrMarcar}>Marcar como pago</button>`;
+      const rotuloParcela = c.parcela_total ? ` <span class="mono" style="color:var(--ink-soft)">· ${c.parcela_numero}/${c.parcela_total}</span>` : "";
       return `<tr>
-        <td class="mono">${c.numero || "—"}</td>
+        <td class="mono">${c.numero || "—"}${rotuloParcela}</td>
         <td>${c.cliente_nome}</td>
         <td>${c.condicoes_pagamento || "—"}</td>
         <td>${venc}</td>
@@ -1149,6 +1153,20 @@ async function renderFinanceiro() {
         try {
           await apiSend(`/orcamentos/${btn.dataset.marcarPago}`, "PUT", { pago: true });
           showAlert("Orçamento marcado como pago.", "success");
+          renderFinanceiro();
+        } catch (e) {
+          showAlert(e.message);
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-marcar-parcela], [data-desmarcar-parcela]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const pagar = btn.dataset.marcarParcela !== undefined;
+        const id = pagar ? btn.dataset.marcarParcela : btn.dataset.desmarcarParcela;
+        try {
+          await apiSend(`/financeiro/parcelas-receber/${id}`, "PUT", { pago: pagar });
+          showAlert(pagar ? "Parcela marcada como paga." : "Pagamento da parcela desfeito.", "success");
           renderFinanceiro();
         } catch (e) {
           showAlert(e.message);
@@ -1845,7 +1863,7 @@ async function openOrcamentoModal(existingItem) {
       <div class="field" id="campo-garantia-dias"><label>Garantia (dias)</label><input type="number" name="garantia_dias" value="${v("garantia_dias", 90)}"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Condições de pagamento</label><input type="text" name="condicoes_pagamento" value="${v("condicoes_pagamento")}" placeholder="ex: 28DDL"></div>
+      <div class="field"><label>Condições de pagamento</label><input type="text" name="condicoes_pagamento" value="${v("condicoes_pagamento")}" placeholder="ex: 28DDL ou 30/60/90 DDL (parcelado)"></div>
       <div class="field" id="campo-prazo-entrega-geral"><label>Prazo de entrega</label><input type="text" name="prazo_entrega" value="${v("prazo_entrega")}" placeholder="ex: 30 dias após aprovação"></div>
     </div>
     <div class="field-row">

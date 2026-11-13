@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -119,6 +121,12 @@ def atualizar_orcamento(orcamento_id: int, dados: schemas.OrcamentoUpdate, db: S
     campos = dados.model_dump(exclude_unset=True, exclude={"itens", "equipamentos", "itens_venda"})
     for campo, valor in campos.items():
         setattr(orcamento, campo, valor)
+
+    # Marcar o orçamento inteiro como pago/não pago vale também para as parcelas dele.
+    if "pago" in campos and orcamento.parcelas:
+        for parcela in orcamento.parcelas:
+            parcela.pago = bool(orcamento.pago)
+            parcela.data_pagamento = datetime.utcnow() if orcamento.pago else None
 
     if dados.itens is not None:
         _substituir_itens(db, orcamento, dados.itens)

@@ -1,8 +1,8 @@
 import re
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,71 @@ def _dias_prazo(condicoes_pagamento: str | None) -> int | None:
         return None
     m = re.search(r"(\d+)", condicoes_pagamento)
     return int(m.group(1)) if m else None
+
+
+# Vários prazos seguidos: "30/60/90 DDL", "30-60-90", "30, 60 e 90 dias", "30+60".
+_RE_PRAZOS = re.compile(r"\d+(?:\s*(?:ddl|dias|d)?\s*(?:/|,|-|\+|&|e)\s*\d+)+", re.IGNORECASE)
+
+
+def _prazos_parcelas(condicoes_pagamento: str | None) -> list[int]:
+    """Prazos de um pagamento parcelado, ex: '30/60/90 DDL' -> [30, 60, 90].
+    Devolve lista vazia quando há um prazo só (ex: '28DDL') ou nenhum — nesses
+    casos o orçamento não é parcelado e segue a regra antiga."""
+    if not condicoes_pagamento:
+        return []
+    m = _RE_PRAZOS.search(condicoes_pagamento)
+    if not m:
+        return []
+    prazos = [int(n) for n in re.findall(r"\d+", m.group(0))]
+    return prazos if len(prazos) >= 2 else []
+
+
+def _dividir_em_parcelas(total: Decimal, n: int) -> list[Decimal]:
+    """Divide o total em n parcelas iguais (2 casas). A diferença de centavos
+    fica na última parcela, para a soma bater exatamente com o total."""
+    base = (total / n).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    partes = [base] * (n - 1)
+    partes.append(total - base * (n - 1))
+    return partes
+
+
+def _sincronizar_parcelas(db: Session, o: models.Orcamento, prazos: list[int]) -> bool:
+    """Deixa as parcelas gravadas iguais aos prazos escritos na condição de
+    pagamento (cria as que faltam, ajusta prazos, remove as que sobram).
+    Devolve True se mudou alguma coisa."""
+    mudou = False
+    existentes = list(o.parcelas)
+    for i, dias in enumerate(prazos):
+        if i < len(existentes):
+            if existentes[i].dias != dias:
+                existentes[i].dias = dias
+                mudou = True
+        else:
+            # Orçamento já marcado como pago antes do parcelamento: nasce tudo pago.
+            o.parcelas.append(models.ParcelaReceber(numero=i + 1, dias=dias, pago=bool(o.pago)))
+            mudou = True
+    for extra in existentes[len(prazos):]:
+        o.parcelas.remove(extra)
+        mudou = True
+    if mudou:
+        db.flush()
+    return mudou
+
+
+def _situacao_vencimento(pago: bool, data_ref: date | None, dias: int | None, hoje: date):
+    """(situacao, data_vencimento) de uma conta a receber (orçamento inteiro ou parcela)."""
+    if pago:
+        return "pago", None
+    if data_ref is None:
+        return "aguardando_conclusao", None
+    if dias is None:
+        return "em_dia", None  # prazo de pagamento não informado no orçamento
+    data_venc = data_ref + timedelta(days=dias)
+    if data_venc < hoje:
+        return "atrasado", data_venc
+    if (data_venc - hoje).days <= 5:
+        return "vence_em_breve", data_venc
+    return "em_dia", data_venc
 
 
 def _faturamento_tecnico_periodo(db: Session, ano: int, mes: int | None = None) -> Decimal:
@@ -150,6 +215,7 @@ def contas_a_receber(db: Session = Depends(get_db)):
     orcamentos = db.query(models.Orcamento).filter(models.Orcamento.status == "aprovado").all()
     hoje = date.today()
     resultado = []
+    houve_mudanca = False
 
     for o in orcamentos:
         valor_servicos = sum((i.quantidade * i.valor_unitario for i in o.itens), Decimal("0"))
@@ -169,23 +235,37 @@ def contas_a_receber(db: Session = Depends(get_db)):
         else:
             data_ref = None  # técnico, ainda sem OS concluída — nada vencendo ainda
 
-        dias = _dias_prazo(o.condicoes_pagamento)
-        data_venc = None
-        if o.pago:
-            situacao = "pago"
-        elif data_ref is None:
-            situacao = "aguardando_conclusao"
-        elif dias is None:
-            situacao = "em_dia"  # prazo de pagamento não informado no orçamento
-        else:
-            data_venc = data_ref + timedelta(days=dias)
-            if data_venc < hoje:
-                situacao = "atrasado"
-            elif (data_venc - hoje).days <= 5:
-                situacao = "vence_em_breve"
-            else:
-                situacao = "em_dia"
+        prazos = _prazos_parcelas(o.condicoes_pagamento)
+        if _sincronizar_parcelas(db, o, prazos):
+            houve_mudanca = True
 
+        if prazos:
+            # Pago em parcelas: uma linha por parcela, com o valor e o vencimento dela.
+            valores = _dividir_em_parcelas(valor_total, len(prazos))
+            for parcela, valor in zip(o.parcelas, valores):
+                situacao, data_venc = _situacao_vencimento(parcela.pago, data_ref, parcela.dias, hoje)
+                resultado.append(
+                    schemas.ContaReceberOut(
+                        orcamento_id=o.id,
+                        numero=o.numero,
+                        cliente_nome=o.cliente.nome,
+                        valor_total=valor,
+                        condicoes_pagamento=o.condicoes_pagamento,
+                        data_referencia=data_ref,
+                        dias_prazo=parcela.dias,
+                        data_vencimento=data_venc if data_ref else None,
+                        pago=bool(parcela.pago),
+                        data_pagamento=parcela.data_pagamento,
+                        situacao=situacao,
+                        parcela_id=parcela.id,
+                        parcela_numero=parcela.numero,
+                        parcela_total=len(prazos),
+                    )
+                )
+            continue
+
+        dias = _dias_prazo(o.condicoes_pagamento)
+        situacao, data_venc = _situacao_vencimento(bool(o.pago), data_ref, dias, hoje)
         resultado.append(
             schemas.ContaReceberOut(
                 orcamento_id=o.id,
@@ -201,6 +281,9 @@ def contas_a_receber(db: Session = Depends(get_db)):
                 situacao=situacao,
             )
         )
+
+    if houve_mudanca:
+        db.commit()
 
     ordem = {"atrasado": 0, "vence_em_breve": 1, "em_dia": 2, "aguardando_conclusao": 3, "pago": 4}
     resultado.sort(key=lambda r: (ordem.get(r.situacao, 5), r.data_vencimento or date.max))
@@ -367,6 +450,33 @@ def detalhe_mensal(ano: int, mes: int | None = None, db: Session = Depends(get_d
     ]
 
     return schemas.DetalheMensalOut(ano=ano, mes=mes, orcamentos=orcamentos, pecas=pecas, despesas=despesas)
+
+
+@router.put("/parcelas-receber/{parcela_id}", response_model=schemas.ParcelaReceberOut)
+def marcar_parcela_paga(parcela_id: int, dados: schemas.ParcelaReceberUpdate, db: Session = Depends(get_db)):
+    """Marca (ou desfaz) o pagamento de UMA parcela. O orçamento só fica como
+    pago quando todas as parcelas dele estiverem pagas."""
+    parcela = db.get(models.ParcelaReceber, parcela_id)
+    if not parcela:
+        raise HTTPException(status_code=404, detail="Parcela não encontrada")
+
+    parcela.pago = dados.pago
+    parcela.data_pagamento = datetime.utcnow() if dados.pago else None
+
+    orcamento = parcela.orcamento
+    todas_pagas = all(p.pago for p in orcamento.parcelas)
+    orcamento.pago = todas_pagas
+    orcamento.data_pagamento = datetime.utcnow() if todas_pagas else None
+
+    db.commit()
+    return schemas.ParcelaReceberOut(
+        id=parcela.id,
+        orcamento_id=orcamento.id,
+        numero=parcela.numero,
+        pago=parcela.pago,
+        data_pagamento=parcela.data_pagamento,
+        orcamento_pago=todas_pagas,
+    )
 
 
 @router.get("/por-cliente", response_model=list[schemas.ClienteRankingOut])

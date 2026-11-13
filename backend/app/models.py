@@ -108,6 +108,9 @@ class Orcamento(Base):
     itens_equipamento = relationship("OrcamentoEquipamento", back_populates="orcamento", cascade="all, delete-orphan")
     ordens_servico = relationship("OrdemServico", back_populates="orcamento")
     itens = relationship("ItemOrcamento", back_populates="orcamento", cascade="all, delete-orphan")
+    parcelas = relationship(
+        "ParcelaReceber", back_populates="orcamento", cascade="all, delete-orphan", order_by="ParcelaReceber.numero"
+    )
     itens_venda = relationship("ItemVendaEquipamento", back_populates="orcamento", cascade="all, delete-orphan")
 
 
@@ -293,6 +296,27 @@ class ContaPagar(Base):
     data_pagamento = Column(DateTime, nullable=True)
     observacoes = Column(Text, nullable=True)
     criado_em = Column(DateTime, default=datetime.utcnow)
+
+
+class ParcelaReceber(Base):
+    """Parcela de um orçamento pago em prazos (ex: "30/60/90 DDL" = 3 parcelas).
+
+    Só existe para orçamentos com mais de um prazo; os de prazo único (ex:
+    "28DDL") continuam sem parcelas, usando `pago` do próprio orçamento.
+    Guardamos apenas o prazo (`dias`) e se foi paga: o valor da parcela e o
+    vencimento são calculados na hora a partir do total do orçamento e da data
+    de referência dele, então não ficam desatualizados se o orçamento mudar."""
+
+    __tablename__ = "parcelas_receber"
+
+    id = Column(Integer, primary_key=True, index=True)
+    orcamento_id = Column(Integer, ForeignKey("orcamentos.id", ondelete="CASCADE"), nullable=False, index=True)
+    numero = Column(Integer, nullable=False)  # 1, 2, 3...
+    dias = Column(Integer, nullable=False)  # prazo em dias (30, 60, 90...)
+    pago = Column(Boolean, default=False, nullable=False)
+    data_pagamento = Column(DateTime, nullable=True)
+
+    orcamento = relationship("Orcamento", back_populates="parcelas")
 
 
 class NotaFiscal(Base):

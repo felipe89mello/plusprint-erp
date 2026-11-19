@@ -209,7 +209,7 @@ class ItemVendaEquipamentoOut(ItemVendaEquipamentoCreate):
 
 class OrcamentoBase(BaseModel):
     numero: Optional[str] = None
-    tipo: str = "tecnico"  # tecnico (manutenção) | venda_equipamento | desenvolvimento
+    tipo: str = "tecnico"  # tecnico (manutenção) | venda_equipamento | venda_suprimentos | desenvolvimento
     cliente_id: int
     local_equipamento: Optional[str] = None
     escopo_servico: Optional[str] = None

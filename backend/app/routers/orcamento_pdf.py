@@ -44,7 +44,7 @@ def _slugify(texto: str) -> str:
 
 
 def _gerar_pdf_bytes(orcamento: models.Orcamento) -> bytes:
-    if orcamento.tipo == "venda_equipamento":
+    if orcamento.tipo in ("venda_equipamento", "venda_suprimentos"):
         return _gerar_pdf_venda(orcamento)
     return _gerar_pdf_tecnico(orcamento)
 
@@ -275,7 +275,7 @@ def _gerar_pdf_venda(orcamento: models.Orcamento) -> bytes:
     story.append(t)
 
     # Itens — Item, NCM, Part Number, Descrição, Quant., Unid., Garantia, Prazo, Preço Unitário
-    story.append(Paragraph("Equipamento(s)", section_style))
+    story.append(Paragraph("Suprimento(s)" if orcamento.tipo == "venda_suprimentos" else "Equipamento(s)", section_style))
     cabecalho = ["Item", "NCM", "Part Number", "Descrição do Item", "Quant.", "Unid.", "Garantia\n(Meses)", "Prazo de\nEntrega", "Preço Unitário"]
     tabela_dados = [[Paragraph(c.replace("\n", "<br/>"), cell_header_style) for c in cabecalho]]
 

@@ -507,12 +507,12 @@ function formatDate(v) {
   return new Date(v).toLocaleDateString("pt-BR");
 }
 
-const TIPO_ORCAMENTO_LABEL = { tecnico: "Técnico / Manutenção", venda_equipamento: "Venda de Equipamento", desenvolvimento: "Desenvolvimento" };
+const TIPO_ORCAMENTO_LABEL = { tecnico: "Técnico / Manutenção", venda_equipamento: "Venda de Equipamento", venda_suprimentos: "Venda de Suprimentos", desenvolvimento: "Desenvolvimento" };
 function formatTipoOrcamento(v) {
   return TIPO_ORCAMENTO_LABEL[v] || TIPO_ORCAMENTO_LABEL.tecnico;
 }
 
-const TIPO_ORCAMENTO_LABEL_CURTO = { venda_equipamento: "Venda de equipamento", desenvolvimento: "Desenvolvimento", tecnico: "Técnico" };
+const TIPO_ORCAMENTO_LABEL_CURTO = { venda_equipamento: "Venda de equipamento", venda_suprimentos: "Venda de suprimentos", desenvolvimento: "Desenvolvimento", tecnico: "Técnico" };
 function formatTipoOrcamentoCurto(v) {
   return TIPO_ORCAMENTO_LABEL_CURTO[v] || TIPO_ORCAMENTO_LABEL_CURTO.tecnico;
 }
@@ -1208,7 +1208,7 @@ async function renderFinanceiro() {
 function buildDetalheMensalHtml(detalhe) {
   const totalOrcamentos = detalhe.orcamentos.reduce((s, o) => s + Number(o.valor), 0);
   const totalCustoVendas = detalhe.orcamentos.reduce(
-    (s, o) => s + (o.tipo === "venda_equipamento" && o.custo != null ? Number(o.custo) : 0),
+    (s, o) => s + ((o.tipo === "venda_equipamento" || o.tipo === "venda_suprimentos") && o.custo != null ? Number(o.custo) : 0),
     0
   );
   const totalPecas = detalhe.pecas.reduce((s, p) => s + Number(p.custo_total), 0);
@@ -1235,7 +1235,7 @@ function buildDetalheMensalHtml(detalhe) {
           <thead><tr><th>Nº</th><th>Cliente</th><th>Tipo</th><th>Valor</th><th>Custo</th><th>Margem</th></tr></thead>
           <tbody>${detalhe.orcamentos
             .map((o) => {
-              const temCusto = o.tipo === "venda_equipamento" && o.custo != null;
+              const temCusto = (o.tipo === "venda_equipamento" || o.tipo === "venda_suprimentos") && o.custo != null;
               const margem = temCusto ? Number(o.valor) - Number(o.custo) : null;
               return `<tr>
                 <td class="mono">${o.numero || "—"}</td>
@@ -1820,6 +1820,7 @@ async function openOrcamentoModal(existingItem) {
           <option value="tecnico" ${tipoAtual === "tecnico" ? "selected" : ""}>Técnico / Manutenção</option>
           <option value="desenvolvimento" ${tipoAtual === "desenvolvimento" ? "selected" : ""}>Desenvolvimento</option>
           <option value="venda_equipamento" ${tipoAtual === "venda_equipamento" ? "selected" : ""}>Venda de Equipamento</option>
+          <option value="venda_suprimentos" ${tipoAtual === "venda_suprimentos" ? "selected" : ""}>Venda de Suprimentos</option>
         </select>
       </div>
       <div class="field"><label>Data de emissão</label><input type="date" name="data" value="${v("data").slice(0, 10)}" placeholder="hoje"></div>
@@ -1852,7 +1853,7 @@ async function openOrcamentoModal(existingItem) {
     </div>
 
     <div id="secao-venda" class="hidden">
-      <label class="field-label-block">Itens — Equipamento(s) Novo(s)</label>
+      <label class="field-label-block" id="label-itens-venda">Itens — Equipamento(s) Novo(s)</label>
       <div id="venda-cards"></div>
       <button type="button" class="btn" id="btn-add-venda-item">+ Adicionar item</button>
       <div class="subtotal-row">Total: <strong id="venda-subtotal-display">R$ 0,00</strong></div>
@@ -1906,14 +1907,15 @@ async function openOrcamentoModal(existingItem) {
     const tipo = document.getElementById("orcamento-tipo").value;
     const mostrarItensTecnicos = tipo === "tecnico" || tipo === "desenvolvimento";
     document.getElementById("secao-tecnico").classList.toggle("hidden", !mostrarItensTecnicos);
-    document.getElementById("secao-venda").classList.toggle("hidden", tipo !== "venda_equipamento");
+    document.getElementById("secao-venda").classList.toggle("hidden", tipo !== "venda_equipamento" && tipo !== "venda_suprimentos");
+    document.getElementById("label-itens-venda").textContent = tipo === "venda_suprimentos" ? "Itens — Suprimento(s) (ribbons, etiquetas...)" : "Itens — Equipamento(s) Novo(s)";
     document.getElementById("secao-equipamentos").classList.toggle("hidden", tipo !== "tecnico");
     document.getElementById("campo-escopo-servico").classList.toggle("hidden", tipo !== "desenvolvimento");
     document.getElementById("label-itens-tecnico").textContent = tipo === "desenvolvimento" ? "Itens do Projeto" : "Peças e Serviços";
     // Na Venda de Equipamento, Garantia e Prazo de entrega já são definidos
     // por item (aparecem na tabela do PDF) — os campos gerais abaixo não são
     // usados nesse caso, então ficam escondidos pra não duplicar.
-    const ehVenda = tipo === "venda_equipamento";
+    const ehVenda = tipo === "venda_equipamento" || tipo === "venda_suprimentos";
     document.getElementById("campo-garantia-dias").classList.toggle("hidden", ehVenda);
     document.getElementById("campo-prazo-entrega-geral").classList.toggle("hidden", ehVenda);
     document.getElementById("label-transporte").textContent = ehVenda ? "Frete/instalação por conta de" : "Transporte por conta de";
@@ -2116,8 +2118,8 @@ async function openOrcamentoModal(existingItem) {
       showAlert("Adicione ao menos um item de peça ou serviço.");
       return;
     }
-    if (data.tipo === "venda_equipamento" && data.itens_venda.length === 0) {
-      showAlert("Adicione ao menos um item de equipamento.");
+    if ((data.tipo === "venda_equipamento" || data.tipo === "venda_suprimentos") && data.itens_venda.length === 0) {
+      showAlert("Adicione ao menos um item.");
       return;
     }
 

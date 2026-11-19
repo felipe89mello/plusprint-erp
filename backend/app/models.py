@@ -83,7 +83,7 @@ class Orcamento(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(String(20), nullable=True)  # nº da proposta comercial (ex: "084")
-    tipo = Column(String(30), default="tecnico")  # tecnico (manutenção) | venda_equipamento | desenvolvimento
+    tipo = Column(String(30), default="tecnico")  # tecnico (manutenção) | venda_equipamento | venda_suprimentos | desenvolvimento
     cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
     local_equipamento = Column(String(150), nullable=True)  # ex: "Loja Mooca"
     escopo_servico = Column(Text, nullable=True)  # usado no tipo "desenvolvimento" (ex: projeto de etiquetas ZPL)

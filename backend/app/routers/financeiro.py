@@ -230,7 +230,7 @@ def contas_a_receber(db: Session = Depends(get_db)):
         os_concluida = next((os_ for os_ in o.ordens_servico if os_.status == "concluido" and os_.data_conclusao), None)
         if os_concluida:
             data_ref = os_concluida.data_conclusao.date()
-        elif o.tipo == "venda_equipamento":
+        elif o.tipo in ("venda_equipamento", "venda_suprimentos"):
             data_ref = o.data.date()
         else:
             data_ref = None  # técnico, ainda sem OS concluída — nada vencendo ainda
@@ -381,7 +381,7 @@ def detalhe_mensal(ano: int, mes: int | None = None, db: Session = Depends(get_d
                     orcamento_id=o.id,
                     numero=o.numero,
                     cliente_nome=o.cliente.nome,
-                    tipo="venda_equipamento",
+                    tipo=o.tipo,
                     valor=valor,
                     custo=custo,
                 )
@@ -492,7 +492,7 @@ def por_cliente(ano: int | None = None, db: Session = Depends(get_db)):
     for o in db.query(models.Orcamento).filter(models.Orcamento.status == "aprovado").all():
         valor = Decimal("0")
         data_ref = o.data
-        if o.tipo == "venda_equipamento":
+        if o.tipo in ("venda_equipamento", "venda_suprimentos"):
             valor = sum((i.quantidade * i.preco_unitario for i in o.itens_venda), Decimal("0"))
         else:
             concluidas = [os_ for os_ in o.ordens_servico if os_.status == "concluido"]

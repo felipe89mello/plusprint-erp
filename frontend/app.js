@@ -1908,7 +1908,7 @@ async function openOrcamentoModal(existingItem) {
     const mostrarItensTecnicos = tipo === "tecnico" || tipo === "desenvolvimento";
     document.getElementById("secao-tecnico").classList.toggle("hidden", !mostrarItensTecnicos);
     document.getElementById("secao-venda").classList.toggle("hidden", tipo !== "venda_equipamento" && tipo !== "venda_suprimentos");
-    document.getElementById("label-itens-venda").textContent = tipo === "venda_suprimentos" ? "Itens — Suprimento(s) (ribbons, etiquetas...)" : "Itens — Equipamento(s) Novo(s)";
+    document.getElementById("label-itens-venda").textContent = tipo === "venda_suprimentos" ? "Itens — Suprimento(s)" : "Itens — Equipamento(s) Novo(s)";
     document.getElementById("secao-equipamentos").classList.toggle("hidden", tipo !== "tecnico");
     document.getElementById("campo-escopo-servico").classList.toggle("hidden", tipo !== "desenvolvimento");
     document.getElementById("label-itens-tecnico").textContent = tipo === "desenvolvimento" ? "Itens do Projeto" : "Peças e Serviços";
@@ -1918,9 +1918,9 @@ async function openOrcamentoModal(existingItem) {
     const ehVenda = tipo === "venda_equipamento" || tipo === "venda_suprimentos";
     document.getElementById("campo-garantia-dias").classList.toggle("hidden", ehVenda);
     document.getElementById("campo-prazo-entrega-geral").classList.toggle("hidden", ehVenda);
-    document.getElementById("label-transporte").textContent = ehVenda ? "Frete/instalação por conta de" : "Transporte por conta de";
+    document.getElementById("label-transporte").textContent = tipo === "venda_suprimentos" ? "Frete por conta de" : ehVenda ? "Frete/instalação por conta de" : "Transporte por conta de";
   }
-  document.getElementById("orcamento-tipo").addEventListener("change", toggleSecaoPorTipo);
+  document.getElementById("orcamento-tipo").addEventListener("change", () => { toggleSecaoPorTipo(); aplicarRotuloDimensoes(); });
   toggleSecaoPorTipo();
 
   function syncEquipCardsFromDom() {
@@ -2008,6 +2008,17 @@ async function openOrcamentoModal(existingItem) {
     });
   }
 
+  // Na Venda de Suprimentos o campo "Part Number" vira "Dimensões" (ex: 110 mm x 74 m).
+  // Usa a mesma coluna do banco, então não precisa de migração.
+  function aplicarRotuloDimensoes() {
+    const suprimentos = document.getElementById("orcamento-tipo").value === "venda_suprimentos";
+    document.querySelectorAll("[data-rotulo-partnumber]").forEach((el) => {
+      el.textContent = suprimentos ? "Dimensões" : "Part Number";
+      const input = el.parentElement.querySelector("input");
+      if (input) input.placeholder = suprimentos ? "ex: 110 mm x 74 m" : "";
+    });
+  }
+
   function renderVendaCards() {
     const wrap = document.getElementById("venda-cards");
     wrap.innerHTML = itensVenda.length
@@ -2020,7 +2031,7 @@ async function openOrcamentoModal(existingItem) {
               </div>
               <div class="field-row">
                 <div class="field"><label>NCM</label><input data-field="ncm" value="${item.ncm ?? ""}"></div>
-                <div class="field"><label>Part Number</label><input data-field="partnumber" value="${item.partnumber ?? ""}"></div>
+                <div class="field"><label data-rotulo-partnumber>Part Number</label><input data-field="partnumber" value="${item.partnumber ?? ""}"></div>
               </div>
               <div class="field"><label>Descrição do item *</label><input data-field="descricao" value="${item.descricao ?? ""}"></div>
               <div class="field-row">
@@ -2054,6 +2065,7 @@ async function openOrcamentoModal(existingItem) {
     wrap.querySelectorAll("[data-venda-item] input").forEach((input) => {
       input.oninput = recalcularSubtotalVenda;
     });
+    aplicarRotuloDimensoes();
     recalcularSubtotalVenda();
   }
 

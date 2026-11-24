@@ -178,13 +178,13 @@ def _gerar_pdf_tecnico(orcamento: models.Orcamento) -> bytes:
     # Condições comerciais
     story.append(Paragraph("Condições Comerciais", section_style))
     condicoes = [
-        f"Validade do Orçamento: {orcamento.validade_dias} dias.",
+        f"Validade do Orçamento: {orcamento.validade_dias} dias." if orcamento.validade_dias else None,
         f"Condições de Pagamento: {orcamento.condicoes_pagamento or '—'}",
         f"Prazo de Entrega: {orcamento.prazo_entrega or '—'}",
         f"Garantia: Peças e Serviços com garantia de {orcamento.garantia_dias} dias contra defeitos de fabricação.",
         f"Transporte: responsabilidade e administração por conta do(a) {orcamento.responsabilidade_transporte}.",
     ]
-    for linha_texto in condicoes:
+    for linha_texto in filter(None, condicoes):
         story.append(Paragraph(linha_texto, body_style))
 
     if orcamento.observacoes:
@@ -276,7 +276,9 @@ def _gerar_pdf_venda(orcamento: models.Orcamento) -> bytes:
 
     # Itens — Item, NCM, Part Number, Descrição, Quant., Unid., Garantia, Prazo, Preço Unitário
     story.append(Paragraph("Suprimento(s)" if orcamento.tipo == "venda_suprimentos" else "Equipamento(s)", section_style))
-    cabecalho = ["Item", "NCM", "Part Number", "Descrição do Item", "Quant.", "Unid.", "Garantia\n(Meses)", "Prazo de\nEntrega", "Preço Unitário"]
+    # Em suprimentos a coluna "Part Number" vira "Dimensões" (mesmo campo do banco).
+    col_pn = "Dimensões" if orcamento.tipo == "venda_suprimentos" else "Part Number"
+    cabecalho = ["Item", "NCM", col_pn, "Descrição do Item", "Quant.", "Unid.", "Garantia\n(Meses)", "Prazo de\nEntrega", "Preço Unitário"]
     tabela_dados = [[Paragraph(c.replace("\n", "<br/>"), cell_header_style) for c in cabecalho]]
 
     valor_total = 0
@@ -305,7 +307,11 @@ def _gerar_pdf_venda(orcamento: models.Orcamento) -> bytes:
 
     itens_table = Table(
         tabela_dados,
-        colWidths=[10 * mm, 16 * mm, 20 * mm, 43 * mm, 14 * mm, 11 * mm, 17 * mm, 15 * mm, 24 * mm],
+        colWidths=(
+            [10 * mm, 16 * mm, 28 * mm, 35 * mm, 14 * mm, 11 * mm, 17 * mm, 15 * mm, 24 * mm]
+            if orcamento.tipo == "venda_suprimentos"
+            else [10 * mm, 16 * mm, 20 * mm, 43 * mm, 14 * mm, 11 * mm, 17 * mm, 15 * mm, 24 * mm]
+        ),
     )
     itens_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), INK),
@@ -336,9 +342,16 @@ def _gerar_pdf_venda(orcamento: models.Orcamento) -> bytes:
         f"Condição de Pagamento: {orcamento.condicoes_pagamento or '—'}.",
         "Impostos: Inclusos, acima especificados.",
         "Prazo de Entrega: Conforme descrito.",
-        f"Frete, instalação e treinamento por conta de: {orcamento.responsabilidade_transporte or 'Plusprint Automação'}.",
+        (
+            f"Frete por conta de: {orcamento.responsabilidade_transporte or 'Plusprint Automação'}."
+            if orcamento.tipo == "venda_suprimentos"
+            else f"Frete, instalação e treinamento por conta de: {orcamento.responsabilidade_transporte or 'Plusprint Automação'}."
+        ),
     ]
-    for linha_texto in condicoes:
+    # Validade 0/vazia = não mencionar validade no PDF.
+    if not orcamento.validade_dias:
+        condicoes = [c for c in condicoes if not c.startswith("Validade:")]
+    for linha_texto in filter(None, condicoes):
         story.append(Paragraph(linha_texto, body_style))
 
     if orcamento.observacoes:
